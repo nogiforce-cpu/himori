@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "himori-static",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8420", "--directory", "/Users/eiji2/Desktop/火守"],
+      "port": 8420
+    }
+  ]
+}

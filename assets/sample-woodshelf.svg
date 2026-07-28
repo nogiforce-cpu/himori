@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1c2016"/>
+      <stop offset="100%" stop-color="#0B0D0A"/>
+    </linearGradient>
+    <linearGradient id="logGrad1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6b4a2c"/>
+      <stop offset="100%" stop-color="#4a3018"/>
+    </linearGradient>
+    <linearGradient id="logGrad2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7a5736"/>
+      <stop offset="100%" stop-color="#5a3d22"/>
+    </linearGradient>
+    <linearGradient id="logGrad3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8a6640"/>
+      <stop offset="100%" stop-color="#6b4a2c"/>
+    </linearGradient>
+    <linearGradient id="roofGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3E4229"/>
+      <stop offset="100%" stop-color="#22261c"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="400" height="280" fill="url(#bgGrad)"/>
+
+  <!-- 背景の山小屋シルエット -->
+  <polygon points="0,150 60,110 130,150" fill="#171912" opacity="0.6"/>
+  <polygon points="300,160 350,120 400,160" fill="#171912" opacity="0.5"/>
+
+  <!-- 薪棚の屋根(小屋根/lean-to) -->
+  <polygon points="20,92 200,44 380,92 380,104 200,58 20,104" fill="url(#roofGrad)" stroke="#241609" stroke-width="2"/>
+  <rect x="34" y="100" width="10" height="150" fill="#22261c"/>
+  <rect x="356" y="100" width="10" height="150" fill="#22261c"/>
+
+  <!-- 積み上げた薪(横積み、複数段) -->
+  <g stroke="#241609" stroke-width="1.5">
+    <!-- 段1(一番下) -->
+    <rect x="40" y="216" width="320" height="34" rx="12" fill="url(#logGrad1)"/>
+    <!-- 段2 -->
+    <rect x="40" y="184" width="320" height="34" rx="12" fill="url(#logGrad2)"/>
+    <!-- 段3 -->
+    <rect x="40" y="152" width="320" height="34" rx="12" fill="url(#logGrad1)"/>
+    <!-- 段4 -->
+    <rect x="40" y="120" width="320" height="34" rx="12" fill="url(#logGrad3)"/>
+  </g>
+
+  <!-- 薪の切り口(木口, 年輪)を右端に並べて「薪」だと分かるようにする -->
+  <g stroke="#2e1c0d" stroke-width="1.6">
+    <circle cx="356" cy="233" r="15" fill="#8a6640"/>
+    <circle cx="356" cy="233" r="7" fill="none" stroke="#3a2e1c" stroke-width="1.2" opacity="0.8"/>
+    <circle cx="356" cy="233" r="11" fill="none" stroke="#3a2e1c" stroke-width="1" opacity="0.5"/>
+
+    <circle cx="356" cy="201" r="15" fill="#a9976b"/>
+    <circle cx="356" cy="201" r="7" fill="none" stroke="#3a2e1c" stroke-width="1.2" opacity="0.8"/>
+    <circle cx="356" cy="201" r="11" fill="none" stroke="#3a2e1c" stroke-width="1" opacity="0.5"/>
+
+    <circle cx="356" cy="169" r="15" fill="#8a6640"/>
+    <circle cx="356" cy="169" r="7" fill="none" stroke="#3a2e1c" stroke-width="1.2" opacity="0.8"/>
+    <circle cx="356" cy="169" r="11" fill="none" stroke="#3a2e1c" stroke-width="1" opacity="0.5"/>
+
+    <circle cx="356" cy="137" r="15" fill="#a9976b"/>
+    <circle cx="356" cy="137" r="7" fill="none" stroke="#3a2e1c" stroke-width="1.2" opacity="0.8"/>
+    <circle cx="356" cy="137" r="11" fill="none" stroke="#3a2e1c" stroke-width="1" opacity="0.5"/>
+  </g>
+
+  <!-- 薪の質感(縦線) -->
+  <g stroke="#2e1c0d" stroke-width="1" opacity="0.35">
+    <line x1="80" y1="220" x2="80" y2="246"/>
+    <line x1="130" y1="218" x2="130" y2="248"/>
+    <line x1="190" y1="220" x2="190" y2="246"/>
+    <line x1="250" y1="218" x2="250" y2="248"/>
+    <line x1="300" y1="220" x2="300" y2="246"/>
+    <line x1="100" y1="188" x2="100" y2="214"/>
+    <line x1="160" y1="186" x2="160" y2="216"/>
+    <line x1="220" y1="188" x2="220" y2="214"/>
+    <line x1="280" y1="186" x2="280" y2="216"/>
+    <line x1="90" y1="156" x2="90" y2="182"/>
+    <line x1="150" y1="154" x2="150" y2="184"/>
+    <line x1="210" y1="156" x2="210" y2="182"/>
+    <line x1="270" y1="154" x2="270" y2="184"/>
+    <line x1="110" y1="124" x2="110" y2="150"/>
+    <line x1="170" y1="122" x2="170" y2="152"/>
+    <line x1="230" y1="124" x2="230" y2="150"/>
+    <line x1="290" y1="122" x2="290" y2="152"/>
+  </g>
+
+  <!-- 地面 -->
+  <rect x="0" y="250" width="400" height="30" fill="#12140e"/>
+</svg>
