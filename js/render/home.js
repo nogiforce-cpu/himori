@@ -10,7 +10,6 @@ import {
   getWoodTypeCatalog,
   addBurnLog,
   removeBurnLog,
-  updateShelf,
   getWeatherCache,
   pushAnshinSnapshot,
   getCurrentSeason,
@@ -18,11 +17,11 @@ import {
   removeSeason,
   endCurrentSeason,
   getSeasons,
+  isDemoActive,
 } from '../store.js';
 import {
   resolveMainShelf,
   computeAnshin,
-  applyBurnConsumption,
   estimateDaysLeft,
   isBelowSafetyLine,
   isOffSeason,
@@ -31,17 +30,18 @@ import {
   shouldShowDryAdvisory,
   shouldPromptSeasonEnd,
   moistureDisplayText,
-  truckAnalogy,
   daysBetween,
   barColor,
   stoveYears,
   todayIso,
   BURN_CONSUMPTION_M3,
 } from '../derive.js';
-import { has48hAlert, factualTodayNote, upcomingDaysSummary } from '../weather.js';
+import { upcoming48hRisk, factualTodayNote, upcomingDaysSummary } from '../weather.js';
 import { showToast, go } from '../ui.js';
 import { openSenseNoteSheet, openShelfPickerSheet } from './sheets.js';
 import { state } from '../state.js';
+import { localIsoDate } from '../date-utils.js';
+import { noPhotoPlaceholderHtml } from '../photos.js';
 
 const SNOOZE_KEY = 'himori.seasonPromptSnoozeUntil';
 
@@ -49,8 +49,9 @@ function shelfPhotoHtml(shelf, height) {
   const photos = getPhotos();
   const photoId = shelf.photoIds[shelf.photoIds.length - 1];
   const photo = photoId ? photos.find((p) => p.id === photoId) : null;
-  const src = photo ? photo.uri : 'assets/sample-woodshelf-1.jpg';
-  return `<div class="photo-ph" style="height:${height}px;margin-bottom:10px"><img src="${src}" alt=""></div>`;
+  const style = `height:${height}px;margin-bottom:10px`;
+  if (!photo) return noPhotoPlaceholderHtml('写真未登録', style);
+  return `<div class="photo-ph" style="${style}"><img src="${photo.uri}" alt=""></div>`;
 }
 
 function weekdayLabel(iso) {
@@ -65,22 +66,53 @@ function weatherStripHtml(weather) {
   return days
     .map((d, i) => {
       const label = i === 0 ? '今日' : `${d.date.slice(5).replace('-', '/')}(${weekdayLabel(d.date)})`;
-      // 降水確率は5%刻みに丸めて表示(日本の天気予報で馴染みのある単位に合わせる)。
-      // 色は確率の高低で変えず、常に同じ青系の色にして「雨マーク=降水確率」だと一目で分かるようにする。
-      const prob = d.precipitationProbability;
-      const roundedProb = prob == null ? null : Math.round(prob / 5) * 5;
+      // 降水確率は「70%か80%か」の細かい違いに実用上の意味が薄い上、気象庁の発表も
+      // 4つの時間帯に分かれていてどれか1つの数字だけ抜き出すのは誠実でない。数字は
+      // やめて、雨か雪かのカテゴリだけを表示する(薪ストーブを焚く人には、確率の
+      // 細かさよりも「雪になるかどうか」の方が実用的にも気分的にも意味がある)。
       const precipBadge =
-        roundedProb == null
-          ? ''
-          : `<div class="p"><svg class="icon" viewBox="0 0 24 24" style="width:11px;height:11px;color:var(--rain)"><use href="#i-drop"/></svg>${roundedProb}%</div>`;
-      return `<div class="day"><div class="d">${label}</div><div class="t">${d.tempMin}〜${d.tempMax}℃</div>${precipBadge}</div>`;
+        d.precipCategory === 'snow'
+          ? `<div class="p"><svg class="icon" viewBox="0 0 24 24" style="width:11px;height:11px;color:var(--rain)"><use href="#i-snow"/></svg>雪</div>`
+          : d.precipCategory === 'rain'
+            ? `<div class="p"><svg class="icon" viewBox="0 0 24 24" style="width:11px;height:11px;color:var(--rain)"><use href="#i-drop"/></svg>雨</div>`
+            : '';
+      return `<div class="day"><div class="d">${label}</div><div class="t"><span class="t-max">${d.tempMax}</span><span class="t-min">${d.tempMin}</span>℃</div>${precipBadge}</div>`;
     })
     .join('');
 }
 
+// 天気の出典を明示する。Yahoo天気など商用アプリの町別の数値とはズレることがあるが、
+// それは不具合ではなく「参照元が違う」ためだと分かるようにするための表示。
+// 気象庁の発表区分が特定できている場合は、その地域の公式予報ページへのリンクも添える
+// (迷った時に一次情報へすぐ確認しに行けるように)。
+function weatherSourceHtml(weather) {
+  if (!weather) return '';
+  const jma = weather.location?.jma;
+  const officeCode = jma?.officeCode;
+  // 市区町村(class20)まで特定できていれば、その市区町村のページに直接リンクする
+  // (気象庁の発表区分そのものは県全体のことが多いが、サイト側は市区町村単位で
+  // ページが分かれており、該当ページを開くと自動でその地域の情報が選択された状態になる)。
+  const jmaUrl = jma?.class20Code
+    ? `https://www.jma.go.jp/bosai/forecast/#area_type=class20s&area_code=${jma.class20Code}`
+    : officeCode
+      ? `https://www.jma.go.jp/bosai/forecast/#area_type=offices&area_code=${officeCode}`
+      : null;
+  // 「南部」だけだとどこの南部か分からないため、必ず都道府県名を前に付ける。
+  const regionLabel = weather.location?.prefecture ? `${weather.location.prefecture}${jma?.regionName}` : jma?.regionName;
+  const label = officeCode
+    ? `気象庁「${regionLabel}」の発表値(降水確率・最高/最低気温)。当日分のみ数値予報モデルの推定値。数時間ごとに更新。地域が体感と違う場合は設定から変更できます`
+    : '数値予報モデル(Open-Meteo)による推定値を表示。数時間ごとに更新';
+  return `
+    <div class="label-sm" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+      <span>${label}</span>
+      ${jmaUrl ? `<a href="${jmaUrl}" target="_blank" rel="noopener" class="link-btn" style="padding:0;white-space:nowrap">気象庁の予報を見る</a>` : ''}
+    </div>`;
+}
+
 function mainShelfCardHtml(shelves, profile, weather, burnLogs, offSeason) {
   const { shelf, isSuggestion } = resolveMainShelf(shelves, profile);
-  if (!shelf) return `<div class="empty">薪棚がまだありません。「薪を追加」から登録してください。</div>`;
+  if (!shelf)
+    return `<div class="empty">薪棚がまだ登録されていません。<button class="link-btn" data-action="open-add-shelf" style="padding:0">薪棚を登録する</button></div>`;
 
   const note = weather ? factualTodayNote(weather.daily) : null;
   const daysLeft = estimateDaysLeft(shelf, burnLogs);
@@ -104,10 +136,9 @@ function mainShelfCardHtml(shelves, profile, weather, burnLogs, offSeason) {
 
   return `
     ${badgeHtml}
-    <div style="font-size:15px;font-weight:700;margin:8px 0 10px">${shelf.name}</div>
+    <div style="font-size:calc(15px * var(--font-scale));font-weight:700;margin:8px 0 10px">${shelf.name}</div>
     ${shelfPhotoHtml(shelf, 96)}
-    <div class="row"><span class="label-sm">使える薪(残量)</span><span style="font-size:12px;font-weight:700">約${shelf.usableVolumeM3}m³${daysLeftText}</span></div>
-    ${truckAnalogy(shelf.usableVolumeM3) ? `<div class="label-sm" style="text-align:right;margin-top:2px">${truckAnalogy(shelf.usableVolumeM3)}</div>` : ''}
+    <div class="row"><span class="label-sm">使える薪(残量)</span><span style="font-size:calc(12px * var(--font-scale));font-weight:700">約${shelf.usableVolumeM3}m³${daysLeftText}</span></div>
     <div class="progress"><div style="width:${shelf.remainingPercent}%;background:${barColor(shelf.remainingPercent)}"></div></div>
     ${moistureText ? `<div class="factual-note">${moistureText}</div>` : ''}
     ${note ? `<div class="factual-note">${note}</div>` : ''}
@@ -184,7 +215,8 @@ function hitokoto(ctx) {
   } else {
     parts.push('残量が少なめです。薪の補充を検討しましょう。');
   }
-  if (weather && has48hAlert(weather.daily)) parts.push('冷え込みや雨の予報があるので、多めに運んでおくと安心です。');
+  const peakRisk = weather ? upcoming48hRisk(weather.daily) : null;
+  if (peakRisk) parts.push('冷え込みや雨の予報があるので、多めに運んでおくと安心です。');
   return parts.join('');
 }
 
@@ -201,6 +233,11 @@ export function render() {
   // バナー: 安心ライン割れ(異常系=赤)/シーズン終了確認/48時間以内の天気予報。優先度順に重ねて表示
   const bannerEl = document.getElementById('home-banner');
   const banners = [];
+  if (isDemoActive()) {
+    banners.push(
+      `<div class="banner" style="background:rgba(169,151,107,.18);border-color:rgba(169,151,107,.5)"><svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px"><use href="#i-info"/></svg><span>デモデータを表示中です。設定画面からいつでも元に戻せます。</span></div>`
+    );
+  }
   const currentSeason = getCurrentSeason();
   const snoozeUntil = localStorage.getItem(SNOOZE_KEY);
   const canAskSeasonEnd = !snoozeUntil || todayIso() >= snoozeUntil;
@@ -225,14 +262,32 @@ export function render() {
       `<div class="banner" style="background:rgba(181,80,46,.14);border-color:rgba(181,80,46,.4)"><svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--red)"><use href="#i-info"/></svg><span>使える薪の合計が安心ライン(${profile.safetyLineM3}m³)を下回っています。薪を追加しましょう。</span></div>`
     );
   }
-  if (weather && has48hAlert(weather.daily)) {
-    banners.push(
-      `<div class="banner"><svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px"><use href="#i-drop"/></svg><span>48時間以内に冷え込み・雨・雪の予報があります。多めに運んでおくと安心です。</span></div>`
-    );
+  // 「薪を多めに運んでおくと安心」は焚いているシーズンでこそ意味があるアドバイスなので、
+  // 真夏のオフシーズンには出さない。また冷え込み/雨で言い回しを分け、夏の雨予報に
+  // 「雪」と言ってしまうような季節外れな文言にならないようにする。
+  const phase = seasonPhase();
+  if (weather && phase !== 'off') {
+    const risk = upcoming48hRisk(weather.daily);
+    if (risk) {
+      // 気象庁の天気文から実際に「雪」と分かる場合は、あいまいな「雨・雪」ではなく
+      // はっきり雪と伝える(薪ストーブと雪は相性が良いので、ワクワクできる情報でもある)。
+      const text = risk.snow
+        ? '48時間以内に雪の予報があります。多めに運んでおくと安心です。'
+        : risk.cold && risk.rain
+          ? '48時間以内に冷え込みと雨の予報があります。多めに運んでおくと安心です。'
+          : risk.cold
+            ? '48時間以内に冷え込みの予報があります。多めに運んでおくと安心です。'
+            : '48時間以内にまとまった雨の予報があります。濡れる前に多めに運んでおくと安心です。';
+      const icon = risk.snow ? 'i-snow' : 'i-drop';
+      banners.push(
+        `<div class="banner"><svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px"><use href="#${icon}"/></svg><span>${text}</span></div>`
+      );
+    }
   }
   bannerEl.innerHTML = banners.join('');
 
   document.getElementById('home-weather-strip').innerHTML = weatherStripHtml(weather);
+  document.getElementById('home-weather-source').innerHTML = weatherSourceHtml(weather);
 
   document.getElementById('home-recommend').innerHTML = mainShelfCardHtml(shelves, profile, weather, burnLogs, offSeason);
 
@@ -240,8 +295,8 @@ export function render() {
   anshinEl.innerHTML = `
     <div class="ring-wrap">${ringSvg(score)}<div class="val">${score}%</div></div>
     <div>
-      <div style="font-size:13px;font-weight:700;margin-bottom:3px">薪の充足率</div>
-      <div style="font-size:11px;color:var(--khaki);line-height:1.6">使える薪(${sumUsable(shelves)}m³) ÷ 想定シーズン使用量(${profile.seasonTargetM3}m³)</div>
+      <div style="font-size:calc(13px * var(--font-scale));font-weight:700;margin-bottom:3px">薪の充足率</div>
+      <div style="font-size:calc(11px * var(--font-scale));color:var(--khaki);line-height:1.6">使える薪(${sumUsable(shelves)}m³) ÷ 想定シーズン使用量(${profile.seasonTargetM3}m³)</div>
     </div>
   `;
 
@@ -255,12 +310,12 @@ export function render() {
   const mainLastCheck = mainShelf ? getChecksForShelf(mainShelf.id)[0] : null;
   document.getElementById('home-note').innerHTML = `
     <div class="label-sm" style="margin-bottom:5px">今日のひとこと</div>
-    <div style="font-size:12px;line-height:1.7">${hitokoto({
+    <div style="font-size:calc(12px * var(--font-scale));line-height:1.7">${hitokoto({
       score,
       shelf: mainShelf,
       weather,
       offSeason,
-      phase: seasonPhase(),
+      phase,
       lastCheckDate: mainLastCheck?.date ?? null,
       shelves,
       allChecks: getChecks(),
@@ -272,15 +327,19 @@ export function render() {
 
   const stoveEl = document.getElementById('home-stove');
   const years = stoveYears(profile.stove.purchaseDate);
+  const stovePhoto = profile.stove.photoId ? getPhotos().find((p) => p.id === profile.stove.photoId) : null;
+  const stovePhotoHtml = stovePhoto
+    ? `<img src="${stovePhoto.uri}" alt="" style="width:100%;height:100%;object-fit:cover">`
+    : noPhotoPlaceholderHtml('', 'width:100%;height:100%');
   stoveEl.innerHTML = `
     <div style="width:48px;height:48px;border-radius:8px;overflow:hidden;flex-shrink:0;border:1px solid var(--leather-line)">
-      <img src="assets/sample-stove.jpg" alt="" style="width:100%;height:100%;object-fit:cover">
+      ${stovePhotoHtml}
     </div>
     <div style="flex:1">
-      <div style="font-size:10px;color:var(--leather-text);letter-spacing:.5px">薪ストーブ</div>
-      <div class="slab" style="font-size:14px;font-weight:700">${profile.stove.name}</div>
+      <div style="font-size:calc(10px * var(--font-scale));color:var(--leather-text);letter-spacing:.5px">薪ストーブ</div>
+      <div class="slab" style="font-size:calc(14px * var(--font-scale));font-weight:700">${profile.stove.name}</div>
     </div>
-    ${years ? `<div style="font-size:9px;color:#d9c6a8;border:1px solid rgba(242,234,214,.25);padding:3px 7px;border-radius:4px">使用${years}年目</div>` : ''}
+    ${years ? `<div style="font-size:calc(9px * var(--font-scale));color:#d9c6a8;border:1px solid rgba(242,234,214,.25);padding:3px 7px;border-radius:4px">使用${years}年目</div>` : ''}
   `;
 }
 
@@ -311,10 +370,16 @@ export function handleBurnToday() {
     showToast('薪棚に使える薪がありません。「薪を追加」から補充してください。');
     return;
   }
-  const prevUsableVolumeM3 = shelf.usableVolumeM3;
-  const prevRemainingPercent = shelf.remainingPercent;
-  const patch = applyBurnConsumption(shelf);
-  updateShelf(shelf.id, patch);
+  // トースト表示だけだと見逃しやすく「押したのに反応したか分からない」となるため、
+  // ボタン自体にも一瞬の反応(パルス)を付ける。render()はこのボタンを再生成しないので
+  // クラスは消えず、アニメーション終了後に自然に元の見た目へ戻る。
+  const burnBtn = document.getElementById('btn-burn-today');
+  if (burnBtn) {
+    burnBtn.classList.remove('flash');
+    void burnBtn.offsetWidth;
+    burnBtn.classList.add('flash');
+  }
+
   const today = todayIso();
   const log = addBurnLog({ date: today, shelfId: shelf.id, note: '' });
   // 焚くのが久しぶりでシーズンが切れていた場合は「新しいシーズンの始まり」として
@@ -324,16 +389,18 @@ export function handleBurnToday() {
   render();
 
   const undoBurn = () => {
-    updateShelf(shelf.id, { usableVolumeM3: prevUsableVolumeM3, remainingPercent: prevRemainingPercent });
     removeBurnLog(log.id);
     if (createdSeason) removeSeason(createdSeason.id);
     render();
     showToast('取り消しました');
   };
 
-  const toastMessage = isSeasonStart ? '🔥今シーズンの焚き始めです。今年も暖かい冬になりますように。' : '今日の記録を保存しました';
+  // 真夏(オフシーズン)にたまたま焚いた場合まで「今年も暖かい冬になりますように」と
+  // 言うと季節感が矛盾するため、シーズン開始の演出は焚き頃の時期(peak/shoulder)だけにする
+  const celebrateSeasonStart = isSeasonStart && seasonPhase() !== 'off';
+  const toastMessage = celebrateSeasonStart ? '🔥今シーズンの焚き始めです。今年も暖かい冬になりますように。' : '今日の記録を保存しました';
   const actions = [{ label: '元に戻す', onClick: undoBurn }];
-  if (!isSeasonStart) {
+  if (!celebrateSeasonStart) {
     actions.push({ label: 'ひとことを追加', onClick: () => openSenseNoteSheet(log.id, () => render()) });
   }
   showToast(toastMessage, actions);
@@ -381,7 +448,7 @@ export function confirmSeasonEnd() {
 export function dismissSeasonEndPrompt() {
   const d = new Date();
   d.setDate(d.getDate() + 14);
-  localStorage.setItem(SNOOZE_KEY, d.toISOString().slice(0, 10));
+  localStorage.setItem(SNOOZE_KEY, localIsoDate(d));
   render();
 }
 

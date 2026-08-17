@@ -18,7 +18,15 @@
   --muted:#8A8C7F;
   --rain:#7FA6C9;
   --radius:12px;
+  --font-scale:1;
 }
+/* 文字サイズ設定(老眼など読みづらさへの配慮)。font-sizeはこの変数を掛けたcalc()に
+   統一してあるので、ここを切り替えるだけで全画面の文字が一括で拡大縮小される。 */
+:root[data-text-size="large"]{--font-scale:1.15}
+:root[data-text-size="xlarge"]{--font-scale:1.3}
+/* ライトテーマ: 以前は--bg等の一部の色しか切り替えておらず、革の質感(--leather-*)や
+   --olive/--gunmetalなど「常に暗い前提」の色がそのまま残っていたため、暗い背景に暗い文字が
+   重なって読めない箇所があった。ダーク前提の色すべてに明るい対になる値を用意する。 */
 :root[data-theme="light"]{
   --bg:#EFEAE0;
   --surface:#E2DCCB;
@@ -26,9 +34,15 @@
   --cream:#241F16;
   --muted:#6b6a5c;
   --khaki:#6f6146;
+  --leather-1:#D9C39A;
+  --leather-2:#C4A876;
+  --leather-line:#A6875A;
+  --leather-text:#3a2c14;
+  --olive:#C3CBA0;
+  --gunmetal:#D9DACE;
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:#161811;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",Meiryo,sans-serif;color:var(--cream);overflow-x:hidden}
+html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",Meiryo,sans-serif;color:var(--cream);overflow-x:hidden}
 body{display:flex;justify-content:center}
 svg.icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 
@@ -37,88 +51,127 @@ svg.icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;s
 .screen.active{display:flex}
 .status{height:env(safe-area-inset-top,0px)}
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:calc(env(safe-area-inset-top,10px) + 4px) 16px 6px}
-.topbar .title{font-size:16px;font-weight:600}
+.topbar .title{font-size:calc(16px * var(--font-scale));font-weight:600}
 .iconbtn{width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:9px;background:transparent;border:0;color:var(--khaki);cursor:pointer}
 .iconbtn:active{background:rgba(255,255,255,.06)}
 .content{flex:1;overflow-y:auto;padding:8px 16px calc(16px + env(safe-area-inset-bottom,0px));-webkit-overflow-scrolling:touch}
-.badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px}
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:calc(11px * var(--font-scale));font-weight:700;padding:3px 9px;border-radius:6px}
 .badge.green{background:rgba(154,196,106,.16);color:var(--green)}
 .badge.amber{background:rgba(217,119,50,.16);color:var(--ember)}
 .badge.red{background:rgba(181,80,46,.2);color:#e08a68}
 .badge.khaki{background:rgba(169,151,107,.18);color:var(--khaki)}
 .card{background:var(--card);border-radius:var(--radius);padding:14px;margin-bottom:12px}
 .card.olive{background:var(--olive)}
-.photo-ph{background:#171912;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#5c5e50;font-size:12px;gap:6px;overflow:hidden}
+.photo-ph{background:var(--surface);border-radius:9px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:calc(12px * var(--font-scale));gap:6px;overflow:hidden}
 .photo-ph img{width:100%;height:100%;object-fit:cover;display:block}
+.photo-ph.empty{flex-direction:column;background:transparent;border:1.5px dashed var(--leather-line);gap:4px}
+.photo-ph.empty svg{width:18px;height:18px;opacity:.6}
+.photo-ph.empty span{font-size:calc(10px * var(--font-scale));text-align:center;padding:0 4px}
 .row{display:flex;justify-content:space-between;align-items:center}
-.label-sm{font-size:12px;color:var(--khaki)}
-.progress{height:6px;background:#171912;border-radius:3px;overflow:hidden;margin-top:6px}
+.label-sm{font-size:calc(12px * var(--font-scale));color:var(--khaki)}
+.progress{height:6px;background:var(--surface);border-radius:3px;overflow:hidden;margin-top:6px}
 .progress > div{height:100%;border-radius:3px}
-.btn-primary{width:100%;background:var(--ember);color:var(--ember-deep);border:0;border-radius:11px;padding:14px;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;min-height:44px}
+.btn-primary{width:100%;background:var(--ember);color:var(--ember-deep);border:0;border-radius:11px;padding:14px;font-size:calc(15px * var(--font-scale));font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;min-height:44px}
 .btn-primary:active{opacity:.85}
 .btn-primary:disabled{opacity:.5;cursor:default}
-.btn-ghost{flex:1;background:transparent;border:1px solid #4a4d40;color:var(--khaki);border-radius:9px;padding:10px;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;min-height:44px}
+/* トースト以外にボタン自体でも「反応した」ことが分かるように短いパルスを入れる
+   (トーストは表示位置が離れていて見逃しやすいため) */
+@keyframes btnFlash{0%{transform:scale(1)}35%{transform:scale(.96);background:var(--green);color:var(--green-deep)}100%{transform:scale(1)}}
+.btn-primary.flash{animation:btnFlash .45s ease}
+.btn-ghost{flex:1;background:transparent;border:1px solid #4a4d40;color:var(--khaki);border-radius:9px;padding:10px;font-size:calc(12px * var(--font-scale));font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;min-height:44px}
 .btn-row{display:flex;gap:8px;margin-bottom:12px}
-.link-btn{background:transparent;border:0;color:var(--khaki);font-size:12px;font-weight:700;text-decoration:underline;cursor:pointer;padding:8px 0}
+.link-btn{background:transparent;border:0;color:var(--khaki);font-size:calc(12px * var(--font-scale));font-weight:700;text-decoration:underline;cursor:pointer;padding:8px 0}
 .ring-wrap{position:relative;width:76px;height:76px;flex-shrink:0}
 .ring-wrap svg{width:100%;height:100%;transform:rotate(-90deg)}
-.ring-wrap .val{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700}
+.ring-wrap .val{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:calc(17px * var(--font-scale));font-weight:700}
 .filter-tabs{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto}
-.filter-tabs button{flex-shrink:0;border:1px solid #4a4d40;background:transparent;color:var(--khaki);border-radius:999px;padding:8px 12px;font-size:12px;font-weight:600;min-height:36px;cursor:pointer}
+.filter-tabs button{flex-shrink:0;border:1px solid #4a4d40;background:transparent;color:var(--khaki);border-radius:999px;padding:8px 12px;font-size:calc(12px * var(--font-scale));font-weight:600;min-height:36px;cursor:pointer}
 .filter-tabs button.active{background:var(--olive);color:var(--cream);border-color:var(--olive)}
 .shelf-card{display:flex;gap:12px;background:var(--card);border-radius:var(--radius);padding:10px;margin-bottom:10px;cursor:pointer}
 .shelf-card .photo-ph{width:76px;height:76px;flex-shrink:0}
 .shelf-card .info{flex:1;min-width:0}
-.shelf-name{font-size:14px;font-weight:700;margin-bottom:2px}
+.shelf-name{font-size:calc(14px * var(--font-scale));font-weight:700;margin-bottom:2px}
 .chev{color:var(--muted);flex-shrink:0;align-self:center}
 .checklist-item{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #262922}
 .checklist-item:last-child{border-bottom:0}
 .checklist-item .ico{width:30px;height:30px;border-radius:8px;background:var(--surface);display:flex;align-items:center;justify-content:center;color:var(--khaki);flex-shrink:0}
-.checklist-item .name{flex:1;font-size:13px}
-.toggle-pill{display:flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:7px 10px;border-radius:999px;border:0;cursor:pointer;min-height:32px}
+.checklist-item .name{flex:1;font-size:calc(13px * var(--font-scale))}
+.toggle-pill{display:flex;align-items:center;gap:4px;font-size:calc(11px * var(--font-scale));font-weight:700;padding:7px 10px;border-radius:999px;border:0;cursor:pointer;min-height:32px}
 .toggle-pill.good{color:var(--green);background:rgba(154,196,106,.12)}
 .toggle-pill.warning{color:#e08a68;background:rgba(181,80,46,.2)}
-.history-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #262922;font-size:12px}
+.history-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #262922;font-size:calc(12px * var(--font-scale))}
 .history-row:last-child{border-bottom:0}
+/* メンテナンス記録を種類ごとに区切って表示するグループ(煙突掃除・ガスケット交換など、
+   項目ごとに「最後にいつやったか」が一目で分かるようにするため) */
+.maint-group{background:var(--card);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+.maint-group-title{display:flex;justify-content:space-between;align-items:baseline;font-size:calc(13px * var(--font-scale));font-weight:700;margin-bottom:2px}
+.maint-group-title .label-sm{font-weight:600}
+.maint-group .history-row{padding:6px 0}
 .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
 .stat-card{background:var(--card);border-radius:10px;padding:10px;text-align:center}
-.stat-card .n{font-size:16px;font-weight:700;margin:4px 0 2px}
-.stat-card .l{font-size:10px;color:var(--khaki)}
+.stat-card .n{font-size:calc(16px * var(--font-scale));font-weight:700;margin:4px 0 2px}
+.stat-card .l{font-size:calc(10px * var(--font-scale));color:var(--khaki)}
 .album-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px}
 .album-grid .photo-ph{aspect-ratio:1;border-radius:8px;cursor:pointer}
-.month-label{font-size:12px;color:var(--khaki);font-weight:700;margin:10px 0 8px}
+.month-label{font-size:calc(12px * var(--font-scale));color:var(--khaki);font-weight:700;margin:10px 0 8px}
 .settings-section{margin-bottom:16px}
-.settings-title{font-size:11px;color:var(--khaki);font-weight:700;margin-bottom:6px;padding-left:2px}
-.settings-row{display:flex;justify-content:space-between;align-items:center;padding:12px 2px;border-bottom:1px solid #262922;font-size:13px;min-height:44px;cursor:pointer}
+.settings-title{font-size:calc(11px * var(--font-scale));color:var(--khaki);font-weight:700;margin-bottom:6px;padding-left:2px}
+.settings-row{display:flex;justify-content:space-between;align-items:center;padding:12px 2px;border-bottom:1px solid #262922;font-size:calc(13px * var(--font-scale));min-height:44px;cursor:pointer}
 .settings-row:last-child{border-bottom:0}
-.settings-row .v{color:var(--khaki);font-size:12px;display:flex;align-items:center;gap:4px}
-.bottomnav{display:flex;border-top:1px solid #26291f;background:#12140e;padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px))}
-.navitem{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;background:transparent;border:0;color:var(--muted);font-size:10px;cursor:pointer;min-height:44px}
+.settings-row .v{color:var(--khaki);font-size:calc(12px * var(--font-scale));display:flex;align-items:center;gap:4px}
+.bottomnav{display:flex;border-top:1px solid var(--surface);background:var(--card);padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px))}
+.navitem{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;background:transparent;border:0;color:var(--muted);font-size:calc(10px * min(var(--font-scale), 1.15));white-space:nowrap;cursor:pointer;min-height:44px}
 .navitem.active{color:var(--green)}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-end;z-index:50;max-width:480px;margin:0 auto}
 .overlay.active{display:flex}
-.sheet{width:100%;background:#1c1e17;border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));max-height:82vh;overflow-y:auto}
-.sheet-title{font-size:13px;color:var(--khaki);font-weight:700;margin-bottom:10px}
-.sheet-item{display:flex;align-items:center;gap:12px;padding:13px 4px;font-size:14px;border-bottom:1px solid #262922;cursor:pointer;min-height:44px}
+.sheet{width:100%;background:var(--card);border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));max-height:82vh;overflow-y:auto}
+.sheet-title{font-size:calc(13px * var(--font-scale));color:var(--khaki);font-weight:700;margin-bottom:10px}
+/* 初回セットアップ(iOSの初期設定のような1画面1テーマの案内)用のシート装飾 */
+.ob-sheet{padding-top:22px}
+.ob-dots{display:flex;justify-content:center;gap:6px;margin-bottom:18px}
+.ob-dot{width:6px;height:6px;border-radius:50%;background:rgba(242,234,214,.2)}
+.ob-dot.on{background:var(--ember);width:16px;border-radius:3px}
+.ob-title{font-size:calc(18px * var(--font-scale));font-weight:700;margin-bottom:10px;line-height:1.4}
+.ob-body{font-size:calc(13px * var(--font-scale));color:var(--khaki);line-height:1.7}
+.sheet-item{display:flex;align-items:center;gap:12px;padding:13px 4px;font-size:calc(14px * var(--font-scale));border-bottom:1px solid #262922;cursor:pointer;min-height:44px}
 .sheet-item:last-child{border-bottom:0}
 .sheet-item svg.icon{color:var(--khaki)}
-.modal{width:100%;max-width:480px;margin:0 auto;background:#1c1e17;border-radius:16px 16px 0 0;padding:16px;max-height:88vh;overflow-y:auto}
+.modal{width:100%;max-width:480px;margin:0 auto;background:var(--card);border-radius:16px 16px 0 0;padding:16px;max-height:88vh;overflow-y:auto}
 .field{margin-bottom:12px}
-.field label{display:block;font-size:11px;color:var(--khaki);margin-bottom:6px;font-weight:700}
-.field .box{background:var(--surface);border-radius:9px;padding:11px 12px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.field label{display:block;font-size:calc(11px * var(--font-scale));color:var(--khaki);margin-bottom:6px;font-weight:700}
+.field .box{background:var(--surface);border-radius:9px;padding:11px 12px;font-size:calc(13px * var(--font-scale));display:flex;justify-content:space-between;align-items:center;gap:8px}
 .field select.box,.field input.box{width:100%;border:0;color:var(--cream);font-family:inherit;appearance:none}
 .field input.box::-webkit-calendar-picker-indicator{filter:invert(0.8)}
-/* 「含水率」「残量%」のような単位付き数値入力: 横幅いっぱいに伸びると数字が左端に寄って
-   バランスが悪くなるため、入力欄自体は短く固定し右寄せにする(単位はその右に置く) */
-.field .box.num-field-row{justify-content:flex-start}
-.field .box.num-field-row input.box,
-.field input.box.num-solo{width:96px;flex:none;text-align:right}
+/* 「含水率」「残量%」のような単位付き数値入力: 数字+単位をひとまとまりの「値チップ」として
+   箱の右端に寄せ、他の設定行と同じ「ラベル→値は右」の視線の流れに揃える。数字は一目で
+   読み取れる値として、写真サムネイルと並んでも見劣りしない大きさ・太さで見せる。
+   input自体もclass="box"を持つため、そのままだと.field .boxの背景色が二重にかかって
+   箱の中にもう一つ箱があるような不自然な見た目になる。入力欄側は透明にして親の
+   チップの背景だけが見えるようにする。 */
+/* 「前回」「今回」どちらも最大3桁(100%)までしかない短い数字なので、箱いっぱいに
+   広げるとかえって間延びする。中央に一つのまとまり(前回→矢印→今回)としてぎゅっと
+   寄せて配置し、余白を持て余さないようにする。 */
+.field .box.num-field-row{justify-content:center;align-items:center;background:rgba(169,151,107,.16);padding:12px 16px;min-height:60px;gap:14px}
+.num-field-row .prev-value{font-size:calc(11px * var(--font-scale));color:var(--muted);line-height:1.4;text-align:right;flex:none}
+.num-field-row .prev-value b{display:block;font-size:calc(18px * var(--font-scale));font-weight:700;color:var(--khaki)}
+.num-field-row .arrow-ic{color:var(--muted);flex-shrink:0}
+.num-field-row .new-value{display:flex;align-items:baseline;gap:2px;flex-shrink:0}
+.num-field-row .new-value input.box{width:74px;flex:none;text-align:right;font-size:calc(30px * var(--font-scale));font-weight:800;color:var(--cream);background:transparent;border-radius:0;line-height:1}
+/* プレースホルダー(例: 18 など)は実際の入力値と同じ30pxだと箱からはみ出て見切れるため、
+   ヒント文字だけ小さくする(入力済みの値は引き続き大きく見せたいのでinputのfont-sizeは
+   そのままにし、::placeholderだけ上書きする) */
+.num-field-row .new-value input.box::placeholder{font-size:calc(13px * var(--font-scale));color:var(--muted)}
+.num-field-row .new-value .label-sm{font-size:calc(16px * var(--font-scale));font-weight:700;color:var(--khaki)}
 .stepper{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border-radius:9px;padding:8px 12px}
-.stepper button{width:36px;height:36px;border-radius:8px;border:1px solid #4a4d40;background:transparent;color:var(--cream);font-size:16px;cursor:pointer}
+.stepper button{width:36px;height:36px;border-radius:8px;border:1px solid #4a4d40;background:transparent;color:var(--cream);font-size:calc(16px * var(--font-scale));cursor:pointer}
 textarea.box{width:100%;border:0;resize:none;font-family:inherit;color:var(--cream);min-height:56px;background:transparent}
-.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);background:var(--olive);color:var(--cream);padding:10px 14px;border-radius:14px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:10px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:60;max-width:88%}
+/* メッセージ行とアクションボタン行を縦に積む構成。1つのflex行に全部詰め込むと、
+   横幅を奪い合ってメッセージ文言(CJKは単語区切りが無く1文字ずつでも改行できる)が
+   極端に狭く潰れて縦書きのようになってしまうバグがあったため、行を分けて解消した。 */
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);background:var(--olive);color:var(--cream);padding:10px 14px;border-radius:14px;font-size:calc(13px * var(--font-scale));font-weight:600;display:flex;flex-direction:column;align-items:flex-start;gap:8px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:60;max-width:88%}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
-.toast .toast-action{background:rgba(242,234,214,.14);border:0;color:var(--cream);font-size:11px;font-weight:700;border-radius:999px;padding:6px 10px;cursor:pointer;white-space:nowrap}
+.toast-actions{display:flex;gap:10px}
+.toast .toast-action{background:rgba(242,234,214,.14);border:0;color:var(--cream);font-size:calc(11px * var(--font-scale));font-weight:700;border-radius:999px;padding:6px 10px;cursor:pointer;white-space:nowrap}
 .slab{font-family:'Roboto Slab',serif}
 .leather{position:relative;background:
     radial-gradient(120% 90% at 20% 15%, rgba(122,74,42,.5), transparent 60%),
@@ -127,58 +180,78 @@ textarea.box{width:100%;border:0;resize:none;font-family:inherit;color:var(--cre
     linear-gradient(160deg,var(--leather-1),var(--leather-2));
   border:1px solid var(--leather-line)}
 .leather::after{content:'';position:absolute;left:6px;right:6px;top:6px;bottom:6px;border:1px dashed rgba(242,234,214,.22);border-radius:6px;pointer-events:none}
+/* ライトテーマでは革の質感自体を明るいタン革に切り替える(--leather-1/2だけでなく、
+   焦げ茶を焼き込むグラデーション層も暗いままだと明るい革にならないため個別に上書き) */
+:root[data-theme="light"] .leather{background:
+    radial-gradient(120% 90% at 20% 15%, rgba(255,255,255,.4), transparent 60%),
+    radial-gradient(100% 80% at 85% 85%, rgba(0,0,0,.06), transparent 60%),
+    repeating-linear-gradient(112deg, rgba(0,0,0,.05) 0 1px, transparent 1px 3px),
+    linear-gradient(160deg,var(--leather-1),var(--leather-2))}
+:root[data-theme="light"] .leather::after{border-color:rgba(58,44,20,.25)}
 .brand-header{display:flex;align-items:flex-end;justify-content:space-between;padding:calc(env(safe-area-inset-top,10px) + 6px) 16px 12px;border-bottom:2px solid var(--leather-line);box-shadow:inset 0 -8px 14px -10px rgba(0,0,0,.6)}
 .brand-header .iconbtn{color:var(--leather-text)}
 .brand-block{flex:1;margin-left:6px;text-align:left}
-.brand-name{font-size:19px;font-weight:700;letter-spacing:.5px}
-.brand-sub{font-size:9px;color:var(--leather-text);letter-spacing:1px;margin-top:2px}
+.brand-name{font-size:calc(19px * var(--font-scale));font-weight:700;letter-spacing:.5px}
+.brand-sub{font-size:calc(9px * var(--font-scale));color:var(--leather-text);letter-spacing:1px;margin-top:2px}
 
-.banner{display:flex;gap:10px;align-items:flex-start;background:rgba(217,119,50,.14);border:1px solid rgba(217,119,50,.35);color:var(--cream);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:12px;line-height:1.6}
+.banner{display:flex;gap:10px;align-items:flex-start;background:rgba(217,119,50,.14);border:1px solid rgba(217,119,50,.35);color:var(--cream);border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:calc(12px * var(--font-scale));line-height:1.6}
 .banner svg{color:var(--ember);flex-shrink:0;margin-top:1px}
-.factual-note{font-size:11px;color:var(--khaki);margin-top:8px;line-height:1.6}
+.factual-note{font-size:calc(11px * var(--font-scale));color:var(--khaki);margin-top:8px;line-height:1.6}
 
 .switch{position:relative;width:42px;height:24px;border-radius:999px;background:#3a3d33;border:0;cursor:pointer;flex-shrink:0}
+:root[data-theme="light"] .switch{background:#c9c7ba}
 .switch::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--muted);transition:transform .15s,background .15s}
 .switch.on{background:var(--olive)}
 .switch.on::after{transform:translateX(18px);background:var(--green)}
 
 .collection-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 .collection-card{background:var(--card);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:4px}
-.collection-card .n{font-size:12px;color:var(--khaki)}
+.collection-card .n{font-size:calc(12px * var(--font-scale));color:var(--khaki)}
 
-.empty{color:var(--muted);font-size:12px;text-align:center;padding:24px 12px;line-height:1.7}
+.empty{color:var(--muted);font-size:calc(12px * var(--font-scale));text-align:center;padding:24px 12px;line-height:1.7}
 
 .weekbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-.weekbar .lbl{font-size:13px;font-weight:700}
+.weekbar .lbl{font-size:calc(13px * var(--font-scale));font-weight:700}
 
-.source-notice{font-size:10px;color:var(--muted);line-height:1.6;padding:10px 2px 4px}
+.source-notice{font-size:calc(10px * var(--font-scale));color:var(--muted);line-height:1.6;padding:10px 2px 4px}
 
 .weather-strip{display:flex;gap:8px;overflow-x:auto;margin-bottom:12px;padding-bottom:2px}
 .weather-strip .day{flex:0 0 auto;background:var(--card);border-radius:10px;padding:8px 10px;text-align:center;min-width:56px}
-.weather-strip .day .d{font-size:10px;color:var(--khaki)}
-.weather-strip .day .t{font-size:12px;font-weight:700;margin-top:4px;white-space:nowrap}
-.weather-strip .day .p{font-size:10px;color:var(--muted);margin-top:2px}
+.weather-strip .day .d{font-size:calc(10px * var(--font-scale));color:var(--khaki)}
+.weather-strip .day .t{font-size:calc(12px * var(--font-scale));font-weight:700;margin-top:4px;white-space:nowrap;color:var(--muted)}
+.weather-strip .day .t-max{color:var(--red)}
+.weather-strip .day .t-min{color:var(--rain);margin-left:4px}
+.weather-strip .day .p{font-size:calc(10px * var(--font-scale));color:var(--muted);margin-top:2px}
 
-.dry-advisory{font-size:11px;color:var(--green);margin-top:8px;line-height:1.6}
+.dry-advisory{font-size:calc(11px * var(--font-scale));color:var(--green);margin-top:8px;line-height:1.6}
 
-.cal-legend{display:flex;gap:14px;font-size:10px;color:var(--khaki);margin-bottom:10px;flex-wrap:wrap}
+.cal-legend{display:flex;gap:14px;font-size:calc(10px * var(--font-scale));color:var(--khaki);margin-bottom:10px;flex-wrap:wrap}
 .cal-legend span{display:flex;align-items:center;gap:4px}
-.cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:10px;color:var(--muted);margin-bottom:4px}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-.cal-day{min-height:52px;border-radius:8px;background:var(--card);display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;position:relative;cursor:pointer;font-size:11px;color:var(--cream);padding:4px 3px}
+/* 1frは実質minmax(auto,1fr)として扱われるため、セル内の幅の広いコンテンツ(気温バッジ等)
+   がある列だけ他より広がり、曜日ごとに列幅が揃わなくなる。minmax(0,1fr)にして
+   コンテンツに関わらず必ず等幅になるようにする(はみ出す分はセル側で吸収する)。 */
+.cal-weekdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center;font-size:calc(10px * var(--font-scale));color:var(--muted);margin-bottom:4px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.cal-day{min-height:52px;border-radius:8px;background:var(--card);display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;position:relative;cursor:pointer;font-size:calc(11px * var(--font-scale));color:var(--cream);padding:4px 3px;overflow:hidden}
 .cal-day.empty{background:transparent;cursor:default;min-height:0}
 .cal-day.today{box-shadow:0 0 0 1.5px var(--green) inset}
 .cal-day.last-burn{box-shadow:0 0 0 1.5px var(--ember) inset}
 .cal-day.warn{box-shadow:0 0 0 1.5px var(--red) inset;background:rgba(181,80,46,.12)}
 .cal-day-top{display:flex;align-items:center;justify-content:space-between;line-height:1}
-.cal-season-mark{font-size:9px}
+.cal-season-mark{font-size:calc(9px * var(--font-scale))}
 .cal-season-mark.cal-season-end{font-weight:700;color:var(--khaki);background:rgba(169,151,107,.18);border-radius:3px;padding:0 3px}
 .cal-season-mark.cal-plan-mark{font-weight:700;color:var(--khaki);border:1px dashed var(--khaki);border-radius:3px;padding:0 3px}
-.cal-day .cal-icons{display:flex;gap:3px;margin-top:3px;min-height:9px;justify-content:center;align-items:center}
-.cal-day .cal-icons svg{width:9px;height:9px;flex-shrink:0}
+.cal-day .cal-icons{display:flex;gap:3px;margin-top:3px;min-height:15px;justify-content:center;align-items:center}
+.cal-day .cal-icons svg{width:10px;height:10px;flex-shrink:0}
 .cal-day .cal-icons .ic-burn{color:var(--ember)}
-.cal-day .cal-icons .ic-maint{color:var(--khaki)}
+/* メンテ実施日は元々khaki(セル背景に近い色)で目立たなかったため、濃い背景色の
+   バッジにして視認性を上げる(焚いた日=炎アイコン単色、メンテ=バッジ、で
+   意味の重さの違いも表現できる)。セルが小さいので、他のアイコンより一回り
+   大きくして気づきやすくする。 */
+.cal-day .cal-icons .ic-maint{color:var(--bg);background:var(--green);border-radius:4px;padding:2px;width:15px;height:15px}
 .cal-day .cal-icons .ic-photo{color:var(--muted)}
-.cal-day .cal-temp{font-size:8px;color:var(--muted);margin-top:2px;text-align:center}
+/* 薪ストーブは「冷え込んだ時に焚く」ものなので、最高気温より最低気温の方が実用的。
+   最低気温だけを、寒さが一目でわかる青いバッジに白抜き文字で表示する。 */
+.cal-day .cal-temp{display:inline-block;align-self:center;font-size:calc(9px * var(--font-scale));font-weight:700;color:var(--cream);background:var(--rain);border-radius:3px;padding:1px 5px;margin-top:3px;white-space:nowrap}
 
-.main-tag{font-size:9px;font-weight:700;color:var(--green);border:1px solid rgba(154,196,106,.4);padding:2px 6px;border-radius:4px;margin-left:6px}
+.main-tag{font-size:calc(9px * var(--font-scale));font-weight:700;color:var(--green);border:1px solid rgba(154,196,106,.4);padding:2px 6px;border-radius:4px;margin-left:6px}

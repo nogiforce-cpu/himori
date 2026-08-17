@@ -37,7 +37,7 @@ export function render() {
 
   document.getElementById('review-summary').innerHTML = `
     <div class="label-sm" style="margin-bottom:6px">今週のまとめ</div>
-    <div style="font-size:13px;line-height:1.7">${summaryText(stats, isOffSeason(burnLogs))}</div>
+    <div style="font-size:calc(13px * var(--font-scale));line-height:1.7">${summaryText(stats, isOffSeason(burnLogs))}</div>
   `;
 
   const deltaColor = stats.anshinDelta > 0 ? 'var(--green)' : stats.anshinDelta < 0 ? 'var(--red)' : 'var(--cream)';
@@ -51,7 +51,7 @@ export function render() {
   const splitNoteEl = document.getElementById('review-split-note');
   splitNoteEl.innerHTML =
     stats.splitCount > 0
-      ? `<div class="card" style="display:flex;justify-content:space-between;align-items:center"><span class="label-sm">この週の薪割り</span><span style="font-size:13px;font-weight:700">${stats.splitCount}回${stats.splitVolumeM3 > 0 ? `・${stats.splitVolumeM3}m³` : ''}${stats.splitVolumeUnknown ? '(量不明あり)' : ''}</span></div>`
+      ? `<div class="card" style="display:flex;justify-content:space-between;align-items:center"><span class="label-sm">この週の薪割り</span><span style="font-size:calc(13px * var(--font-scale));font-weight:700">${stats.splitCount}回${stats.splitVolumeM3 > 0 ? `・${stats.splitVolumeM3}m³` : ''}${stats.splitVolumeUnknown ? '(量不明あり)' : ''}</span></div>`
       : '';
 
   document.getElementById('review-chart').innerHTML = chartSvg(stats.trendPoints, range);

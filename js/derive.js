@@ -1,4 +1,5 @@
 // 保存せず都度計算する派生値のロジック
+import { localIsoDate } from './date-utils.js';
 
 const BURN_CONSUMPTION_M3 = 0.03; // 「今日、焚いた」1回あたりの消費目安
 
@@ -15,7 +16,7 @@ export function daysBetween(fromIso, toIso = todayIso()) {
 }
 
 export function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localIsoDate();
 }
 
 // 乾燥済み薪棚を優先し、乾いた順(dryingStartedAtが古い順)に使う。
@@ -92,11 +93,17 @@ export function moistureDisplayText(latestCheck) {
   return null;
 }
 
+// 「十分乾燥した薪」とみなす含水率の目安(一般的に20%以下が目安とされる)。
+// この数値自体はこれまで内部の判定にしか使っておらず、ユーザーには見えていなかった。
+// 実測値を入力しても「その数字が良いのか悪いのか」分からないのは不親切なので、
+// 含水率の入力欄・履歴の両方でこの閾値を使って明示する。
+export const DRY_MOISTURE_THRESHOLD_PERCENT = 20;
+
 // 「そろそろ乾燥薪」の目安ヒント: 乾燥開始から一定日数、または直近チェックの含水率が閾値以下
 export function shouldShowDryAdvisory(shelf, latestCheck) {
   if (!shelf || shelf.status !== '乾燥中') return false;
   const daysDrying = shelf.dryingStartedAt ? daysBetween(shelf.dryingStartedAt) : 0;
-  const moistureOk = latestCheck?.moisturePercent != null && latestCheck.moisturePercent <= 20;
+  const moistureOk = latestCheck?.moisturePercent != null && latestCheck.moisturePercent <= DRY_MOISTURE_THRESHOLD_PERCENT;
   return daysDrying >= 180 || moistureOk;
 }
 
@@ -110,7 +117,7 @@ export function estimateDaysLeft(shelf, burnLogs) {
   const windowDays = 30;
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - windowDays);
-  const cutoffIso = cutoff.toISOString().slice(0, 10);
+  const cutoffIso = localIsoDate(cutoff);
   const recentCount = burnLogs.filter((b) => b.shelfId === shelf.id && b.date >= cutoffIso).length;
   if (recentCount < 3) return null;
   const avgDaily = (recentCount * BURN_CONSUMPTION_M3) / windowDays;
@@ -124,15 +131,6 @@ export function isBelowSafetyLine(shelves, safetyLineM3) {
     .filter((s) => s.status !== '来季用')
     .reduce((sum, s) => sum + s.usableVolumeM3, 0);
   return total < safetyLineM3;
-}
-
-// 「今日焚いた」の消費を反映した薪棚の更新パッチを返す
-export function applyBurnConsumption(shelf) {
-  const usable = Math.max(0, shelf.usableVolumeM3 - BURN_CONSUMPTION_M3);
-  const remainingPercent = shelf.totalVolumeM3
-    ? Math.round((usable / shelf.totalVolumeM3) * 100)
-    : 0;
-  return { usableVolumeM3: Math.round(usable * 100) / 100, remainingPercent };
 }
 
 // 薪追加を反映した薪棚の更新パッチを返す(総量を超える場合は総量も引き上げる)
@@ -157,8 +155,7 @@ export function weekRange(offsetWeeks = 0) {
   start.setDate(now.getDate() - dow);
   const end = new Date(start);
   end.setDate(start.getDate() + 6);
-  const toIso = (d) => d.toISOString().slice(0, 10);
-  return { start: toIso(start), end: toIso(end) };
+  return { start: localIsoDate(start), end: localIsoDate(end) };
 }
 
 export function formatWeekLabel(range) {
@@ -227,13 +224,6 @@ export function summaryText(stats, offSeason) {
   return parts.join('');
 }
 
-// 体感しやすい量の目安(軽トラ荷台に山積みで約1m³が目安、と言われることが多いのでそれを基準にする)。
-// あくまで感覚的な目安であり、正確な計算値ではないことが伝わるよう「約」を必ず付ける。
-export function truckAnalogy(usableVolumeM3) {
-  if (!usableVolumeM3 || usableVolumeM3 < 0.4) return null;
-  const trucks = Math.round((usableVolumeM3 / 1.0) * 2) / 2;
-  return `軽トラ約${trucks}台分`;
-}
 
 // 乾燥に適した日(低湿度・降水なし)のカウント。予測日数には使わず参考表示のみ(取得したdailyは今日から先の予報)
 export function dryFriendlyDaysCount(dailyWeather) {

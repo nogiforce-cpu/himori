@@ -5,9 +5,10 @@ import * as review from './render/review.js';
 import * as album from './render/album.js';
 import * as settings from './render/settings.js';
 import * as calendar from './render/calendar.js';
-import { openAddWoodModal, openWoodTypeCollectionSheet, openInfoSheet, openPostalCodeSheet } from './render/sheets.js';
-import { seedIfEmpty, getProfile } from './store.js';
-import { ensureWeatherFresh, maybeNotifyWeather, maybeNotifyChimney } from './weather.js';
+import { openAddWoodModal, openAddShelfSheet, openWoodTypeCollectionSheet, openInfoSheet } from './render/sheets.js';
+import { seedIfEmpty, getProfile, getShelves } from './store.js';
+import { ensureWeatherFresh, maybeNotifyWeather, maybeNotifyChimney, maybeNotifyShelfCheck } from './weather.js';
+import { maybeStartOnboarding } from './onboarding.js';
 import { go, openMenu, closeMenu, onNavigate } from './ui.js';
 import { ensureCurrentShelf, state } from './state.js';
 
@@ -30,12 +31,13 @@ async function refreshWeatherAndNotify() {
     maybeNotifyWeather(cache.daily, profile.notificationsEnabled);
   }
   maybeNotifyChimney(profile.nextChimneyCleaning, profile.notificationsEnabled);
+  maybeNotifyShelfCheck(getShelves(), profile.notificationsEnabled);
   home.render();
   check.render();
 }
 
-// 振り返り画面内の「カレンダー / 週次まとめ」切り替え。カレンダーは以前メニューの奥にしか
-// 無かったが使用頻度が高いはずなので、下部ナビ「振り返り」の既定ビューに昇格させた。
+// カレンダー画面内の「カレンダー / 週次まとめ」切り替え。カレンダーは以前メニューの奥にしか
+// 無かったが使用頻度が高いはずなので、下部ナビ「カレンダー」の既定ビューに昇格させた。
 function setReviewView(view) {
   state.reviewView = view;
   const calEl = document.getElementById('review-view-calendar');
@@ -54,8 +56,8 @@ function setReviewView(view) {
 const NAV_TABS = [
   { id: 'home', label: 'ホーム', icon: 'i-home' },
   { id: 'shelves', label: '薪棚一覧', icon: 'i-warehouse' },
-  { id: 'check', label: '記録', icon: 'i-check' },
-  { id: 'review', label: '振り返り', icon: 'i-chart' },
+  { id: 'check', label: '棚チェック', icon: 'i-check' },
+  { id: 'review', label: 'カレンダー', icon: 'i-calendar' },
   { id: 'album', label: 'アルバム', icon: 'i-image' },
 ];
 
@@ -74,7 +76,7 @@ function wireStatic() {
   on('btn-alerts', 'click', () => {
     openInfoSheet(
       'お知らせについて',
-      '<p>通知は「48時間以内の冷え込み・雨・雪」と「煙突・触媒清掃の予定日」の2種類のみです。設定で通知を許可すると、アプリを開いたタイミングで判定・表示されます(常時のプッシュ通知ではありません)。</p>'
+      '<p>通知は「48時間以内の冷え込み・雨・雪」「煙突・触媒清掃の予定日」「薪棚を14日以上チェックしていない」の3種類のみです。設定で通知を許可すると、アプリを開いたタイミングで判定・表示されます(常時のプッシュ通知ではありません)。</p>'
     );
   });
   on('btn-burn-today', 'click', () => home.handleBurnToday());
@@ -84,16 +86,18 @@ function wireStatic() {
     go('check');
   });
   on('btn-open-add', 'click', () => openAddWoodModal(renderAll));
-  on('btn-shelves-add', 'click', () => openAddWoodModal(renderAll));
+  on('btn-shelves-add', 'click', () => openAddShelfSheet(renderAll));
+  on('btn-woodtypes', 'click', () => openWoodTypeCollectionSheet());
   on('btn-check-back', 'click', () => go('shelves'));
   on('btn-check-save', 'click', () => check.saveCheck());
   on('btn-week-prev', 'click', () => review.weekPrev());
   on('btn-week-next', 'click', () => review.weekNext());
   on('btn-split-log', 'click', () => review.openSplitLog());
-  on('btn-album-add', 'click', () => album.addPhotoFlow());
+  on('btn-album-info', 'click', () => album.showAlbumInfo());
   on('btn-settings-back', 'click', () => go('home'));
   on('btn-cal-prev', 'click', () => calendar.calPrev());
   on('btn-cal-next', 'click', () => calendar.calNext());
+  on('cal-month-picker', 'change', (e) => calendar.pickMonth(e.target.value));
 
   document.querySelectorAll('#review-view-tabs button').forEach((btn) => {
     btn.addEventListener('click', () => setReviewView(btn.dataset.view));
@@ -112,15 +116,6 @@ function wireStatic() {
   on('menu-woodtypes', 'click', () => {
     closeMenu();
     openWoodTypeCollectionSheet();
-  });
-  on('menu-calendar', 'click', () => {
-    closeMenu();
-    go('review');
-    setReviewView('calendar');
-  });
-  on('menu-export', 'click', () => {
-    closeMenu();
-    settings.exportData();
   });
   on('menu-guide', 'click', () => {
     closeMenu();
@@ -152,6 +147,8 @@ function wireStatic() {
 }
 
 const ACTIONS = {
+  'open-add-shelf': () => openAddShelfSheet(renderAll),
+  'open-woodtypes': () => openWoodTypeCollectionSheet(),
   'open-shelf-check': (el) => shelves.openShelfCheck(el.dataset.shelfId),
   'pick-shelf': () => check.pickShelf(),
   'edit-shelf': () => check.editShelf(),
@@ -172,17 +169,18 @@ const ACTIONS = {
   'open-cal-day': (el) => calendar.openCalDay(el.dataset.date),
   'edit-username': () => settings.editUsername(),
   'edit-stove': () => settings.editStove(),
-  'edit-purchase-date': () => settings.editPurchaseDate(),
-  'edit-catalyst': () => settings.editCatalyst(),
   'edit-safety-line': () => settings.editSafetyLine(),
   'edit-season-target': () => settings.editSeasonTarget(),
   'open-maintenance': () => settings.openMaintenance(),
   'toggle-notifications': () => settings.toggleNotifications(),
   'toggle-theme': () => settings.toggleTheme(),
-  'edit-postal': () => settings.editPostal(),
+  'cycle-text-size': () => settings.cycleTextSize(),
+  'edit-location': () => settings.editLocation(),
   'edit-chimney': () => settings.editChimney(),
   'export-data': () => settings.exportData(),
   'import-data': () => settings.importData(),
+  'load-demo-data': () => settings.loadDemoData(),
+  'reset-demo-data': () => settings.resetDemoData(),
   'open-guide': () => settings.openGuide(),
   'open-faq': () => settings.openFaq(),
   'open-contact': () => settings.openContact(),
@@ -215,11 +213,7 @@ async function registerServiceWorker() {
 }
 
 function maybeShowOnboarding() {
-  const profile = getProfile();
-  const dismissed = localStorage.getItem('himori.onboardingDismissed');
-  if (!profile.postalCode && !dismissed) {
-    openPostalCodeSheet(() => refreshWeatherAndNotify());
-  }
+  maybeStartOnboarding(() => refreshWeatherAndNotify());
 }
 
 function boot() {
@@ -241,7 +235,7 @@ function boot() {
     if (app) {
       app.insertAdjacentHTML(
         'afterbegin',
-        '<div style="position:fixed;inset:0;z-index:999;background:#0B0D0A;color:#F2EAD6;padding:24px;font-size:13px;line-height:1.7">読み込みに失敗しました。ページを再読み込みしても直らない場合は、ブラウザのサイトデータ(キャッシュ)を削除してから開き直してください。</div>'
+        '<div style="position:fixed;inset:0;z-index:999;background:#0B0D0A;color:#F2EAD6;padding:24px;font-size:calc(13px * var(--font-scale));line-height:1.7">読み込みに失敗しました。ページを再読み込みしても直らない場合は、ブラウザのサイトデータ(キャッシュ)を削除してから開き直してください。</div>'
       );
     }
   }

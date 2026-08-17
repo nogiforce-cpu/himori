@@ -33,16 +33,21 @@ export function showToast(message, actions = [], { duration } = {}) {
   const msg = document.createElement('span');
   msg.textContent = message;
   el.appendChild(msg);
-  actions.forEach(({ label, onClick }) => {
-    const btn = document.createElement('button');
-    btn.className = 'toast-action';
-    btn.textContent = label;
-    btn.onclick = () => {
-      hideToast();
-      onClick();
-    };
-    el.appendChild(btn);
-  });
+  if (actions.length) {
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'toast-actions';
+    actions.forEach(({ label, onClick }) => {
+      const btn = document.createElement('button');
+      btn.className = 'toast-action';
+      btn.textContent = label;
+      btn.onclick = () => {
+        hideToast();
+        onClick();
+      };
+      actionsRow.appendChild(btn);
+    });
+    el.appendChild(actionsRow);
+  }
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(hideToast, duration ?? (actions.length ? 6000 : 2200));
@@ -78,4 +83,22 @@ export function openOverlay(html, { sheet = true } = {}) {
 export function closeOverlay() {
   const root = document.getElementById('modal-root');
   root.innerHTML = '';
+}
+
+// window.confirm()はブラウザ標準のダイアログが前触れなく出て、アプリの見た目と合わず
+// 唐突に感じられる(誤ってキャンセルすると何も起きなかったように見えて紛らわしい)。
+// アプリ内のシートで同じ確認体験を提供する。
+export function openConfirmSheet({ title, message, confirmLabel = '実行する', cancelLabel = 'キャンセル', onConfirm }) {
+  const ov = openOverlay(`
+    <div class="sheet">
+      <div class="sheet-title">${title}</div>
+      <div style="font-size:calc(13px * var(--font-scale));line-height:1.7;color:var(--cream);margin-bottom:16px">${message}</div>
+      <button class="btn-primary" id="confirm-sheet-ok" style="margin-bottom:8px">${confirmLabel}</button>
+      <button class="btn-ghost" data-action="close-overlay" style="width:100%">${cancelLabel}</button>
+    </div>
+  `);
+  ov.querySelector('#confirm-sheet-ok').addEventListener('click', () => {
+    closeOverlay();
+    onConfirm();
+  });
 }

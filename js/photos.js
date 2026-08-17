@@ -3,6 +3,13 @@
 const MAX_EDGE = 900;
 const JPEG_QUALITY = 0.75;
 
+// 写真が未登録の場所に、実写のサンプル画像を代わりに表示すると「本物のデータが
+// 入っている」ように見えて紛らわしい(デモデータ解除後も写真が残って見えるなど)。
+// 未登録であることがひと目でわかる、点線枠+アイコンのプレースホルダーを共通で使う。
+export function noPhotoPlaceholderHtml(label = '写真未登録', style = '') {
+  return `<div class="photo-ph empty" style="${style}"><svg class="icon" viewBox="0 0 24 24"><use href="#i-camera"/></svg><span>${label}</span></div>`;
+}
+
 export function pickImageFile() {
   return new Promise((resolve) => {
     const input = document.createElement('input');

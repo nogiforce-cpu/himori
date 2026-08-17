@@ -1,6 +1,5 @@
 import { getPhotos, deletePhoto } from '../store.js';
-import { pickImageFile, fileToResizedDataUrl } from '../photos.js';
-import { openAddPhotoSheet, openPhotoViewSheet } from './sheets.js';
+import { openPhotoViewSheet, openInfoSheet } from './sheets.js';
 import { state } from '../state.js';
 
 function monthLabel(dateIso) {
@@ -19,7 +18,7 @@ export function render() {
 
   const el = document.getElementById('album-content');
   if (photos.length === 0) {
-    el.innerHTML = `<div class="empty">まだ写真がありません。右上の＋から追加できます。</div>`;
+    el.innerHTML = `<div class="empty">まだ写真がありません。薪棚・薪ストーブ・メンテ記録・樹種コレクションのそれぞれの編集画面から写真を登録すると、ここに集まります。</div>`;
     return;
   }
 
@@ -60,9 +59,9 @@ export function viewPhoto(photoId) {
   });
 }
 
-export async function addPhotoFlow() {
-  const file = await pickImageFile();
-  if (!file) return;
-  const dataUrl = await fileToResizedDataUrl(file);
-  openAddPhotoSheet(dataUrl, () => render());
+export function showAlbumInfo() {
+  openInfoSheet(
+    '写真について',
+    '<p>写真はこのアルバムから直接追加することはできません。薪棚・薪ストーブ・メンテナンス記録・樹種コレクションそれぞれの編集画面から写真を登録すると、自動的にここに集まって振り返れるようになります。</p>'
+  );
 }

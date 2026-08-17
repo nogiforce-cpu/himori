@@ -1,8 +1,20 @@
-import { getProfile, updateProfile, exportAllData, importAllData, getBurnLogs, getShelves, getCurrentSeason } from '../store.js';
-import { requestNotificationPermission, GEO_SOURCE_NOTICE } from '../weather.js';
-import { showToast, go } from '../ui.js';
-import { openEditSheet, openPostalCodeSheet, openInfoSheet, openMaintenanceSheet } from './sheets.js';
+import {
+  getProfile,
+  updateProfile,
+  exportAllData,
+  importAllData,
+  getBurnLogs,
+  getShelves,
+  getCurrentSeason,
+  isDemoActive,
+  loadDemoSeason,
+  resetDemoSeason,
+} from '../store.js';
+import { requestNotificationPermission } from '../weather.js';
+import { showToast, go, openConfirmSheet } from '../ui.js';
+import { openEditSheet, openStoveEditSheet, openLocationSheet, openInfoSheet, openMaintenanceSheet } from './sheets.js';
 import { daysBetween, isBelowSafetyLine, shouldPromptSeasonEnd } from '../derive.js';
+import { localIsoDate } from '../date-utils.js';
 
 const LAST_EXPORT_KEY = 'himori.lastExportDate';
 
@@ -10,19 +22,38 @@ function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
 }
 
+const TEXT_SIZE_ORDER = ['normal', 'large', 'xlarge'];
+const TEXT_SIZE_LABELS = { normal: '標準', large: '大', xlarge: '特大' };
+function applyTextSize(size) {
+  document.documentElement.setAttribute('data-text-size', size);
+}
+
 export function initTheme() {
   applyTheme(getProfile().theme);
+  applyTextSize(getProfile().textSize || 'normal');
+}
+
+// 設定行タップのたびに 標準→大→特大→標準 と巡回させる(老眼など読みづらさへの配慮。
+// 全画面の文字サイズはCSSの--font-scale変数1つで一括制御しているので、ここではその値の
+// 元になるdata-text-size属性を切り替えるだけでよい)
+export function cycleTextSize() {
+  const profile = getProfile();
+  const idx = TEXT_SIZE_ORDER.indexOf(profile.textSize || 'normal');
+  const next = TEXT_SIZE_ORDER[(idx + 1) % TEXT_SIZE_ORDER.length];
+  updateProfile({ textSize: next });
+  applyTextSize(next);
+  render();
+  showToast(`文字サイズ: ${TEXT_SIZE_LABELS[next]}`);
 }
 
 export function render() {
   const profile = getProfile();
   applyTheme(profile.theme);
+  applyTextSize(profile.textSize || 'normal');
 
   document.getElementById('settings-profile').innerHTML = `
     <div class="settings-row" data-action="edit-username" style="border-bottom-color:rgba(242,234,214,.14)"><span>ユーザー名</span><span class="v">${profile.userName} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
-    <div class="settings-row" data-action="edit-stove" style="border-bottom-color:rgba(242,234,214,.14)"><span>愛機ストーブ</span><span class="v slab">${profile.stove.name} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
-    <div class="settings-row" data-action="edit-purchase-date"><span>購入日</span><span class="v">${profile.stove.purchaseDate ?? '未設定'} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
-    <div class="settings-row" data-action="edit-catalyst"><span>触媒交換時期</span><span class="v">${profile.stove.catalystReplacedAt ?? '未設定'} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
+    <div class="settings-row" data-action="edit-stove"><span>愛機ストーブ</span><span class="v slab">${profile.stove.name} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
   `;
 
   document.getElementById('settings-basic').innerHTML = `
@@ -31,11 +62,16 @@ export function render() {
     <div class="settings-row" data-action="edit-safety-line"><span>安心ライン設定</span><span class="v">${profile.safetyLineM3}m³ <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
     <div class="settings-row" data-action="toggle-notifications"><span>通知設定</span><span class="v"><button class="switch ${profile.notificationsEnabled ? 'on' : ''}"></button></span></div>
     <div class="settings-row" data-action="toggle-theme"><span>テーマ設定</span><span class="v">${profile.theme === 'light' ? 'ライト' : 'ダーク'}<button class="switch ${profile.theme === 'light' ? 'on' : ''}"></button></span></div>
-    <div class="settings-row" data-action="edit-postal"><span>郵便番号(天気連動)</span><span class="v">${profile.postalCode ?? '未設定'} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
+    <div class="settings-row" data-action="cycle-text-size"><span>文字サイズ</span><span class="v">${TEXT_SIZE_LABELS[profile.textSize || 'normal']} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
+    <div class="settings-row" data-action="edit-location"><span>お住まいの地域(天気連動)</span><span class="v">${profile.location ? `${profile.location.prefecture}${profile.location.city}` : '未設定'} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
     <div class="settings-row" data-action="edit-chimney"><span>次回煙突掃除予定日</span><span class="v">${profile.nextChimneyCleaning ?? '未設定'} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
     <div class="settings-row" data-action="open-maintenance"><span>メンテナンス記録</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
-    <div class="settings-row" data-action="export-data"><span>データ・エクスポート</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-download"/></svg></span></div>
-    <div class="settings-row" data-action="import-data"><span>データ・インポート</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
+  `;
+
+  const lastExport = localStorage.getItem(LAST_EXPORT_KEY);
+  document.getElementById('settings-backup').innerHTML = `
+    <div class="settings-row" data-action="export-data"><span>バックアップを作成</span><span class="v">${lastExport ? `${lastExport}に作成` : ''} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-download"/></svg></span></div>
+    <div class="settings-row" data-action="import-data"><span>バックアップから復元</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-upload"/></svg></span></div>
   `;
 
   document.getElementById('settings-support').innerHTML = `
@@ -44,17 +80,21 @@ export function render() {
     <div class="settings-row" data-action="open-contact"><span>お問い合わせ</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
   `;
 
+  const demoActive = isDemoActive();
+  document.getElementById('settings-demo').innerHTML = demoActive
+    ? `<div class="settings-row" style="color:var(--ember)"><span>デモデータを表示中です</span></div>
+       <div class="settings-row" data-action="reset-demo-data"><span>デモデータをリセット</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>`
+    : `<div class="settings-row" data-action="load-demo-data"><span>デモデータを試す(1シーズン分)</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>`;
+
   const backupNoticeEl = document.getElementById('settings-backup-notice');
   const backupNoticeWrap = document.getElementById('settings-backup-notice-wrap');
   if (backupNoticeEl && backupNoticeWrap) {
     const notice = backupReminderText();
     backupNoticeWrap.style.display = notice ? '' : 'none';
     backupNoticeEl.innerHTML = notice
-      ? `<div class="settings-row" data-action="export-data" style="color:var(--ember)"><span>${notice}</span><span class="v">今すぐ書き出す <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>`
+      ? `<div class="settings-row" data-action="export-data" style="color:var(--ember)"><span>${notice}</span><span class="v">今すぐ作成する <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>`
       : '';
   }
-
-  document.getElementById('settings-source-notice').textContent = profile.location ? GEO_SOURCE_NOTICE : '';
 
   updateAppBadge();
 }
@@ -100,46 +140,18 @@ export function editUsername() {
   });
 }
 
+// ストーブ名・購入日・触媒交換時期は、以前は設定画面の別々の行(別々のシート)に
+// 分かれていて何がどこにあるか分かりにくかったため、1つの「愛機ストーブ」情報として
+// まとめて編集できるようにしている
 export function editStove() {
-  const profile = getProfile();
-  openEditSheet({
-    title: '愛機ストーブ',
-    fields: [{ key: 'name', label: 'ストーブ名', type: 'text', value: profile.stove.name }],
-    onSave: (v) => {
-      updateProfile({ stove: { ...profile.stove, name: v.name || profile.stove.name } });
-      render();
-    },
-  });
-}
-
-export function editPurchaseDate() {
-  const profile = getProfile();
-  openEditSheet({
-    title: '購入日',
-    fields: [{ key: 'date', label: '購入日', type: 'date', value: profile.stove.purchaseDate }],
-    onSave: (v) => {
-      updateProfile({ stove: { ...profile.stove, purchaseDate: v.date || null } });
-      render();
-    },
-  });
-}
-
-export function editCatalyst() {
-  const profile = getProfile();
-  openEditSheet({
-    title: '触媒交換時期',
-    fields: [{ key: 'date', label: '交換日', type: 'date', value: profile.stove.catalystReplacedAt }],
-    onSave: (v) => {
-      updateProfile({ stove: { ...profile.stove, catalystReplacedAt: v.date || null } });
-      render();
-    },
-  });
+  openStoveEditSheet(() => render());
 }
 
 export function editSafetyLine() {
   const profile = getProfile();
   openEditSheet({
     title: '安心ライン設定',
+    description: '使える薪の合計がこの量を下回ったら、ホーム画面で注意を表示します。「そろそろ買い足す・割っておく」の目安にしてください。',
     fields: [{ key: 'safetyLineM3', label: '安心ラインの残量(m³)', type: 'number', value: profile.safetyLineM3 }],
     onSave: (v) => {
       updateProfile({ safetyLineM3: v.safetyLineM3 ?? profile.safetyLineM3 });
@@ -187,8 +199,8 @@ export function toggleTheme() {
   render();
 }
 
-export function editPostal() {
-  openPostalCodeSheet(() => render(), { skippable: false });
+export function editLocation() {
+  openLocationSheet(() => render(), { skippable: false });
 }
 
 export function editChimney() {
@@ -203,39 +215,77 @@ export function editChimney() {
   });
 }
 
+export function loadDemoData() {
+  openConfirmSheet({
+    title: 'デモデータを試す',
+    message: '1シーズン分のデモデータ(記録・チェック・メンテナンス履歴など)を読み込みます。現在のデータは自動的に退避され、あとから「デモデータをリセット」でいつでも元に戻せます。よろしいですか?',
+    confirmLabel: '読み込む',
+    onConfirm: () => {
+      loadDemoSeason();
+      showToast('デモデータを読み込みました');
+      go('home');
+      location.reload();
+    },
+  });
+}
+
+export function resetDemoData() {
+  openConfirmSheet({
+    title: 'デモデータをリセット',
+    message: 'デモデータをやめて、元のデータに戻しますか?',
+    confirmLabel: '元に戻す',
+    onConfirm: () => {
+      resetDemoSeason();
+      showToast('元のデータに戻しました');
+      go('home');
+      location.reload();
+    },
+  });
+}
+
 export function exportData() {
   const data = exportAllData();
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `himori-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `himori-backup-${localIsoDate()}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  localStorage.setItem(LAST_EXPORT_KEY, new Date().toISOString().slice(0, 10));
-  showToast('バックアップを書き出しました');
+  localStorage.setItem(LAST_EXPORT_KEY, localIsoDate());
+  showToast('バックアップを作成しました');
   render();
 }
 
+// 復元は今の端末のデータを丸ごと置き換える(部分マージではない)取り消せない操作なので、
+// ファイルを選ぶ前に必ず確認を挟む。うっかり別のバックアップファイルを選んで
+// 今のデータを消してしまう事故を防ぐため。
 export function importData() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'application/json';
-  input.onchange = async () => {
-    const file = input.files?.[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      importAllData(data);
-      showToast('データを読み込みました');
-      go('home');
-      location.reload();
-    } catch {
-      showToast('読み込みに失敗しました');
-    }
-  };
-  input.click();
+  openConfirmSheet({
+    title: 'バックアップから復元',
+    message: 'バックアップファイルを選ぶと、今この端末にあるデータは全て復元した内容に置き換わります。この操作は元に戻せません。よろしいですか?',
+    confirmLabel: 'ファイルを選ぶ',
+    onConfirm: () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'application/json';
+      input.onchange = async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          const data = JSON.parse(text);
+          importAllData(data);
+          showToast('バックアップから復元しました');
+          go('home');
+          location.reload();
+        } catch {
+          showToast('復元に失敗しました(ファイルの形式をご確認ください)');
+        }
+      };
+      input.click();
+    },
+  });
 }
 
 export function openGuide() {
@@ -247,9 +297,9 @@ export function openGuide() {
     <p>薪を補充したら「薪を追加」で記録してください。入手先メモを残しておくと、次のシーズンにどこで買ったか思い出せて便利です。</p>
     <p>「レギュラー薪棚」は今シーズンいちばん使う棚のことです。ホーム上部のカードから直接チェック画面に進めます。未設定のときはアプリが自動でおすすめを出しますが、あくまで参考です。</p>
     <p>薪割りをしたら「薪割り記録」(斧アイコン)で記録できます。量がまだ分からないときは「量はまだ分からない」を選べば、あとから正確な数字が無くても記録だけ残せます。</p>
-    <p>振り返りタブの「カレンダー」では、日ごとの記録がアイコンで一覧できます。同じ日付をタップすると、去年の同じ日に何をしていたかも確認できます。</p>
+    <p>カレンダータブでは、日ごとの記録がアイコンで一覧できます。同じ日付をタップすると、去年の同じ日に何をしていたかも確認できます。</p>
     <p>ストーブのカード(ホーム下部)をタップすると、煙突掃除やガスケット交換などのメンテナンス記録画面に進めます。</p>
-    <p>データはこの端末にしか保存されないので、「データ・エクスポート」で定期的にバックアップを書き出しておくと安心です。</p>
+    <p>データはこの端末にしか保存されないので、設定画面の「バックアップを作成」で定期的にバックアップを作っておくと安心です。</p>
     `
   );
 }
@@ -257,13 +307,13 @@ export function openFaq() {
   openInfoSheet(
     'よくあるご質問',
     `
-    <p><b>Q. 天気通知が届きません</b><br>設定で通知を許可し、郵便番号を登録してください。アプリを開いた時にのみ判定するため、常時のプッシュ通知ではありません。</p>
-    <p><b>Q. データはどこに保存されますか</b><br>この端末のブラウザ内(localStorage)にのみ保存されます。機種変更時やブラウザのデータ削除の前には「データ・エクスポート」でバックアップしてください。</p>
+    <p><b>Q. 天気通知が届きません</b><br>設定で通知を許可し、お住まいの地域を登録してください。アプリを開いた時にのみ判定するため、常時のプッシュ通知ではありません。</p>
+    <p><b>Q. データはどこに保存されますか</b><br>この端末のブラウザ内(localStorage)にのみ保存されます。機種変更時やブラウザのデータ削除の前には「バックアップを作成」で必ずバックアップしてください。</p>
     <p><b>Q. 含水計を持っていません。含水率は必須ですか</b><br>いいえ、任意です。実測値が無い場合は、薪棚チェックの「乾燥状態」項目(良好/要確認)を代わりに表示します。</p>
     <p><b>Q. 薪の残量はどうやって記録しますか</b><br>「満タン写真」を基準にした見た目の割合と、数値での手入力(%)のどちらか、もしくは両方を使って記録できます。写真からの自動判定ではないので、ご自身の感覚で調整してください。</p>
     <p><b>Q. シーズンオフの間はどうなりますか</b><br>約1ヶ月焚いていない状態が続くと、シーズン終了を確認するお知らせが出ます。次に焚いた日から自動的に新しいシーズンが始まります。</p>
     <p><b>Q. 記録を間違えて登録してしまいました</b><br>「今日、焚いた」の直後はトーストの「元に戻す」で取り消せます。それ以外の記録は、対象の薪棚・カレンダーの日付から編集・削除してください。</p>
-    <p><b>Q. 他の端末と記録を共有できますか</b><br>現在は端末ごとの保存のみです。「データ・エクスポート」で書き出したファイルを「データ・インポート」で別端末に読み込むことで移行できます。</p>
+    <p><b>Q. 他の端末と記録を共有できますか</b><br>現在は端末ごとの保存のみです。「バックアップを作成」で書き出したファイルを、別端末の「バックアップから復元」で読み込むことで移行できます。</p>
     `
   );
 }

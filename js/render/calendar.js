@@ -13,6 +13,7 @@ import {
 import { lastBurnDate, todayIso, BURN_CONSUMPTION_M3 } from '../derive.js';
 import { openOverlay } from '../ui.js';
 import { state } from '../state.js';
+import { localIsoDate } from '../date-utils.js';
 
 function inMonth(dateIso, year, month) {
   return dateIso.slice(0, 4) === String(year) && Number(dateIso.slice(5, 7)) === month + 1;
@@ -36,6 +37,11 @@ function iso(year, month, day) {
 export function render() {
   const { year, month, daysInMonth, startWeekday } = monthRange(state.calendarMonthOffset);
   document.getElementById('cal-month-label').textContent = `${year}年${month + 1}月`;
+  // ＜＞での1ヶ月ずつの移動に加え、ラベルをタップするとネイティブの年月ピッカー
+  // (iOSではドラムロール状のホイール)で一気に遠い月へ移動できるようにする。
+  // 「カレンダー」なので過去だけでなく未来へも制限なく移動できる。
+  const monthPickerEl = document.getElementById('cal-month-picker');
+  monthPickerEl.value = `${year}-${String(month + 1).padStart(2, '0')}`;
 
   const burnLogs = getBurnLogs();
   const maintenanceLogs = getMaintenanceLogs();
@@ -93,7 +99,9 @@ export function render() {
           ? '<span class="cal-season-mark cal-plan-mark">予定</span>'
           : '';
     const w = weatherByDate.get(dateIso);
-    const tempHtml = w ? `<span class="cal-temp">${w.tempMax}°</span>` : '';
+    // セルの横幅が狭いため「最低:」を付けると崩れやすい。数字だけでも青バッジの
+    // 見た目で「気温(寒さの目安)」だと伝わるので、コンパクトさを優先する。
+    const tempHtml = w ? `<span class="cal-temp">${w.tempMin}℃</span>` : '';
     cells.push(`
       <div class="${classes.join(' ')}" data-action="open-cal-day" data-date="${dateIso}">
         <div class="cal-day-top"><span>${d}</span>${seasonMark}</div>
@@ -114,7 +122,7 @@ export function render() {
   if (summaryEl) {
     summaryEl.innerHTML = `
       <div class="label-sm" style="margin-bottom:6px">今月のまとめ</div>
-      <div style="font-size:12px;line-height:1.9">
+      <div style="font-size:calc(12px * var(--font-scale));line-height:1.9">
         🔥焚いた回数 ${monthBurns.length}回(約${usedVolume}m³)<br>
         ${monthChecks.length > 0 ? `📋薪棚チェック ${monthChecks.length}回<br>` : ''}
         ${monthMaint.length > 0 ? `🔧メンテナンス ${monthMaint.length}回<br>` : ''}
@@ -135,31 +143,28 @@ export function render() {
   }
 }
 
-// 未来に進めるのは「予定が入っている月」までに限る(振り返り中心の画面なので、
-// 予定のない月まで延々と進められる意味はない)。今のところ唯一の未来予定は
-// 次回煙突掃除予定日なので、それを基準に上限を決める。
-function maxFutureMonthOffset() {
-  const nextChimney = getProfile()?.nextChimneyCleaning;
-  if (!nextChimney) return 0;
-  const now = new Date();
-  const target = new Date(nextChimney + 'T00:00:00');
-  const offset = (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth());
-  return Math.max(0, offset);
-}
-
 export function calPrev() {
   state.calendarMonthOffset -= 1;
   render();
 }
 export function calNext() {
-  state.calendarMonthOffset = Math.min(maxFutureMonthOffset(), state.calendarMonthOffset + 1);
+  state.calendarMonthOffset += 1;
+  render();
+}
+
+// 年月ピッカー(input type="month")で選ばれた年月へ一気に移動する
+export function pickMonth(value) {
+  if (!value) return;
+  const [y, m] = value.split('-').map(Number);
+  const now = new Date();
+  state.calendarMonthOffset = (y - now.getFullYear()) * 12 + (m - 1 - now.getMonth());
   render();
 }
 
 function lastYearSameDay(dateIso) {
   const d = new Date(dateIso + 'T00:00:00');
   d.setFullYear(d.getFullYear() - 1);
-  return d.toISOString().slice(0, 10);
+  return localIsoDate(d);
 }
 
 // 「去年の今日」何をしていたかを一言で表す。シーズン開始/終了・メンテ記録があれば拾う
@@ -215,7 +220,10 @@ export function openCalDay(dateIso) {
     sections.push(
       `<div class="label-sm" style="font-weight:700;margin:10px 0 4px">薪を追加</div>` +
         additions
-          .map((a) => `<div class="history-row"><span>${shelfName(a.shelfId)}${a.source ? `(${a.source})` : ''}</span><span>+${a.addedVolumeM3}m³</span></div>`)
+          .map(
+            (a) =>
+              `<div class="history-row"><span>${shelfName(a.shelfId)}${a.source ? `(${a.source})` : ''}</span><span>+${a.addedVolumeM3}m³${a.price != null ? `・¥${a.price.toLocaleString()}` : ''}</span></div>`
+          )
           .join('')
     );
   }

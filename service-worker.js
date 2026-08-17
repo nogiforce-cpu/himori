@@ -1,4 +1,4 @@
-const CACHE = 'himori-v9';
+const CACHE = 'himori-v38';
 const ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,9 @@ const ASSETS = [
   './js/store.js',
   './js/derive.js',
   './js/weather.js',
+  './js/date-utils.js',
+  './js/onboarding.js',
+  './js/jma.js',
   './js/photos.js',
   './js/render/home.js',
   './js/render/shelves.js',
@@ -51,7 +54,7 @@ self.addEventListener('fetch', (e) => {
     return; // 天気・位置情報APIは常にネットワークへ(キャッシュ対象外)
   }
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'no-store' })
       .then((res) => {
         const resClone = res.clone();
         caches.open(CACHE).then((c) => c.put(e.request, resClone));
