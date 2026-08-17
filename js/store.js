@@ -181,6 +181,17 @@ export function addCheck(check) {
   writeJSON(KEYS.checks, checks);
   return record;
 }
+export function updateCheck(id, patch) {
+  const checks = getChecks();
+  const idx = checks.findIndex((c) => c.id === id);
+  if (idx === -1) return null;
+  checks[idx] = { ...checks[idx], ...patch };
+  writeJSON(KEYS.checks, checks);
+  return checks[idx];
+}
+export function deleteCheck(id) {
+  writeJSON(KEYS.checks, getChecks().filter((c) => c.id !== id));
+}
 
 // ---- Burn logs ----
 export function getBurnLogs() {

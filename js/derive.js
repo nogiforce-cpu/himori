@@ -3,6 +3,16 @@ import { localIsoDate } from './date-utils.js';
 
 const BURN_CONSUMPTION_M3 = 0.03; // 「今日、焚いた」1回あたりの消費目安
 
+// 薪棚チェックの項目一覧。check.js(記録画面)とsheets.js(履歴の編集シート)の
+// 両方から参照するため、循環importを避けてここに置く。
+export const CHECKLIST_ITEMS = [
+  { key: 'dryness', label: '乾燥状態' },
+  { key: 'pestMold', label: '虫・カビ' },
+  { key: 'leakMoisture', label: '雨漏り・湿気' },
+  { key: 'airflow', label: '通気・風通し' },
+  { key: 'stackCondition', label: '薪の崩れ・整頓' },
+];
+
 export function barColor(pct) {
   if (pct <= 35) return 'var(--red)';
   if (pct <= 55) return 'var(--ember)';

@@ -18,6 +18,7 @@ import {
   endCurrentSeason,
   getSeasons,
   isDemoActive,
+  addPhoto,
 } from '../store.js';
 import {
   resolveMainShelf,
@@ -38,10 +39,10 @@ import {
 } from '../derive.js';
 import { upcoming48hRisk, factualTodayNote, upcomingDaysSummary } from '../weather.js';
 import { showToast, go } from '../ui.js';
-import { openSenseNoteSheet, openShelfPickerSheet } from './sheets.js';
+import { openSenseNoteSheet, openShelfPickerSheet, openPhotoViewSheet } from './sheets.js';
 import { state } from '../state.js';
 import { localIsoDate } from '../date-utils.js';
-import { noPhotoPlaceholderHtml } from '../photos.js';
+import { noPhotoPlaceholderHtml, pickImageFile, fileToResizedDataUrl } from '../photos.js';
 
 const SNOOZE_KEY = 'himori.seasonPromptSnoozeUntil';
 
@@ -100,7 +101,7 @@ function weatherSourceHtml(weather) {
   // 「南部」だけだとどこの南部か分からないため、必ず都道府県名を前に付ける。
   const regionLabel = weather.location?.prefecture ? `${weather.location.prefecture}${jma?.regionName}` : jma?.regionName;
   const label = officeCode
-    ? `気象庁「${regionLabel}」の発表値(降水確率・最高/最低気温)。当日分のみ数値予報モデルの推定値。数時間ごとに更新。地域が体感と違う場合は設定から変更できます`
+    ? `気象庁「${regionLabel}」の発表値(降水確率・最高/最低気温)。当日の最低気温のみ数値予報モデルの推定値。数時間ごとに更新。地域が体感と違う場合は設定から変更できます`
     : '数値予報モデル(Open-Meteo)による推定値を表示。数時間ごとに更新';
   return `
     <div class="label-sm" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
@@ -144,6 +145,7 @@ function mainShelfCardHtml(shelves, profile, weather, burnLogs, offSeason) {
     ${note ? `<div class="factual-note">${note}</div>` : ''}
     ${advisory}
     <div class="row" style="margin-top:10px">${actionHtml}</div>
+    ${isSuggestion ? `<div class="label-sm" style="margin-top:6px;line-height:1.6">レギュラーにすると、今後「今日、焚いた」の記録がこの薪棚のものとして数えられ、使用ペースから「あと何日分」の目安を計算します。残量(%)自体は自動で減らないので、正確な残量は薪棚チェックで更新してください。</div>` : ''}
   `;
 }
 
@@ -213,7 +215,7 @@ function hitokoto(ctx) {
       parts.push('今のところは焚けます。');
     }
   } else {
-    parts.push('残量が少なめです。薪の補充を検討しましょう。');
+    parts.push('残量が少なめです。');
   }
   const peakRisk = weather ? upcoming48hRisk(weather.daily) : null;
   if (peakRisk) parts.push('冷え込みや雨の予報があるので、多めに運んでおくと安心です。');
@@ -259,7 +261,7 @@ export function render() {
   }
   if (isBelowSafetyLine(shelves, profile.safetyLineM3)) {
     banners.push(
-      `<div class="banner" style="background:rgba(181,80,46,.14);border-color:rgba(181,80,46,.4)"><svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--red)"><use href="#i-info"/></svg><span>使える薪の合計が安心ライン(${profile.safetyLineM3}m³)を下回っています。薪を追加しましょう。</span></div>`
+      `<div class="banner" style="background:rgba(181,80,46,.14);border-color:rgba(181,80,46,.4)"><svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--red)"><use href="#i-info"/></svg><span>使える薪の合計が安心ライン(${profile.safetyLineM3}m³)を下回っています。</span></div>`
     );
   }
   // 「薪を多めに運んでおくと安心」は焚いているシーズンでこそ意味があるアドバイスなので、
@@ -332,7 +334,7 @@ export function render() {
     ? `<img src="${stovePhoto.uri}" alt="" style="width:100%;height:100%;object-fit:cover">`
     : noPhotoPlaceholderHtml('', 'width:100%;height:100%');
   stoveEl.innerHTML = `
-    <div style="width:48px;height:48px;border-radius:8px;overflow:hidden;flex-shrink:0;border:1px solid var(--leather-line)">
+    <div data-action="edit-stove-photo" style="width:48px;height:48px;border-radius:8px;overflow:hidden;flex-shrink:0;border:1px solid var(--leather-line);cursor:pointer">
       ${stovePhotoHtml}
     </div>
     <div style="flex:1">
@@ -404,6 +406,27 @@ export function handleBurnToday() {
     actions.push({ label: 'ひとことを追加', onClick: () => openSenseNoteSheet(log.id, () => render()) });
   }
   showToast(toastMessage, actions);
+}
+
+// ホームのストーブ写真は「タップ=写真の操作」という直感に合わせ、カード全体のタップ
+// (メンテ記録を開く)とは別のアクションにしている。未登録ならその場で選んですぐ登録、
+// 登録済みならいつもの写真ビュー(見る/削除)を開く。
+export async function editStovePhoto() {
+  const profile = getProfile();
+  const existing = profile.stove.photoId ? getPhotos().find((p) => p.id === profile.stove.photoId) : null;
+  if (existing) {
+    openPhotoViewSheet(existing, () => {
+      updateProfile({ stove: { ...profile.stove, photoId: null } });
+      render();
+    });
+    return;
+  }
+  const file = await pickImageFile();
+  if (!file) return;
+  const uri = await fileToResizedDataUrl(file);
+  const photo = addPhoto({ category: 'ストーブ', date: todayIso(), uri });
+  updateProfile({ stove: { ...profile.stove, photoId: photo.id } });
+  render();
 }
 
 export function setMainShelf(shelfId) {

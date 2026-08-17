@@ -19,8 +19,12 @@ import {
   deleteWoodTypeFromCatalog,
   getMaintenanceLogs,
   addMaintenanceLog,
+  getChecks,
+  updateCheck,
+  deleteCheck,
 } from '../store.js';
-import { applyWoodAddition, todayIso, daysBetween } from '../derive.js';
+import { applyWoodAddition, todayIso, daysBetween, CHECKLIST_ITEMS } from '../derive.js';
+import { localIsoDate } from '../date-utils.js';
 import { pickImageFile, fileToResizedDataUrl } from '../photos.js';
 import { resolveLocationFromCity, fetchCitiesForPrefecture, PREFECTURES } from '../weather.js';
 import { listRegionsForOffice } from '../jma.js';
@@ -433,13 +437,22 @@ export function openWoodTypeCollectionSheet() {
       </div>
     </div>
   `);
-  ov.querySelector('#woodtype-add-btn').addEventListener('click', () => {
+  const addFromInput = () => {
     const input = ov.querySelector('#woodtype-new');
     const name = input.value.trim();
     if (!name) return;
     addWoodTypeToCatalog(name);
     input.value = '';
     draw();
+  };
+  ov.querySelector('#woodtype-add-btn').addEventListener('click', addFromInput);
+  // スマホのキーボードで「完了/Go」を押した時にも追加できるよう、Enterキーにも対応する
+  // (ボタンを明示的にタップしないと反応しないと「押しても効かない」ように感じられるため)
+  ov.querySelector('#woodtype-new').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addFromInput();
+    }
   });
   draw();
 }
@@ -678,6 +691,93 @@ export function openPhotoViewSheet(photo, onDeleted) {
   });
 }
 
+// ---- 薪棚チェック記録の編集・削除 ----
+// 記録は間違えることもあるので、後から直したり消したりできるようにする
+// (これが無いと、押し間違いや古い記録がずっと履歴に残ってしまう)。
+export function openCheckEditSheet(checkId, onSaved) {
+  const check = getChecks().find((c) => c.id === checkId);
+  if (!check) return;
+  const items = { ...check.items };
+
+  const ov = openOverlay(`
+    <div class="sheet">
+      <div class="row" style="margin-bottom:10px">
+        <span class="sheet-title" style="margin-bottom:0">チェック記録を編集</span>
+        <button class="iconbtn" data-action="close-overlay"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="field">
+        <label>日付</label>
+        <input class="box" id="check-edit-date" type="date" value="${check.date}">
+      </div>
+      <div id="check-edit-items" style="margin-bottom:6px"></div>
+      <div class="field">
+        <label>残量(%)</label>
+        <input class="box" id="check-edit-pct" type="number" min="0" max="100" value="${check.remainingPercent}">
+      </div>
+      <div class="field">
+        <label>含水率(%・任意)</label>
+        <input class="box" id="check-edit-moisture" type="number" min="0" max="60" value="${check.moisturePercent ?? ''}">
+      </div>
+      <div class="field">
+        <label>メモ</label>
+        <textarea class="box" id="check-edit-memo">${check.memo || ''}</textarea>
+      </div>
+      <div class="btn-row" style="margin-top:4px">
+        <button class="btn-ghost" style="color:var(--red);border-color:var(--red)" id="check-edit-delete">削除する</button>
+        <button class="btn-primary" style="flex:1" id="check-edit-save">保存する</button>
+      </div>
+    </div>
+  `);
+
+  function drawItems() {
+    ov.querySelector('#check-edit-items').innerHTML = CHECKLIST_ITEMS.map((item) => {
+      const val = items[item.key];
+      return `
+        <div class="checklist-item">
+          <span class="name">${item.label}</span>
+          <button class="toggle-pill ${val === 'good' ? 'good' : 'warning'}" type="button" data-key="${item.key}">
+            ${val === 'good' ? '良好' : '異常あり'}
+          </button>
+        </div>`;
+    }).join('');
+    ov.querySelectorAll('#check-edit-items .toggle-pill').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        items[btn.dataset.key] = items[btn.dataset.key] === 'good' ? 'warning' : 'good';
+        drawItems();
+      });
+    });
+  }
+  drawItems();
+
+  ov.querySelector('#check-edit-save').addEventListener('click', () => {
+    const date = ov.querySelector('#check-edit-date').value || check.date;
+    const pct = Math.max(0, Math.min(100, Number(ov.querySelector('#check-edit-pct').value) || 0));
+    const shelf = getShelf(check.shelfId);
+    const usableVolumeM3 = shelf ? Math.round(((shelf.totalVolumeM3 * pct) / 100) * 100) / 100 : check.usableVolumeM3;
+    const moistureRaw = ov.querySelector('#check-edit-moisture').value;
+    const moisturePercent = moistureRaw === '' ? null : Math.max(0, Math.min(60, Number(moistureRaw)));
+    const memo = ov.querySelector('#check-edit-memo').value.trim();
+    updateCheck(checkId, { date, remainingPercent: pct, usableVolumeM3, items, moisturePercent, memo });
+    closeOverlay();
+    showToast('チェック記録を更新しました');
+    onSaved && onSaved();
+  });
+
+  ov.querySelector('#check-edit-delete').addEventListener('click', () => {
+    openConfirmSheet({
+      title: 'チェック記録を削除',
+      message: `${check.date}のチェック記録を削除します。この操作は元に戻せません。よろしいですか?`,
+      confirmLabel: '削除する',
+      onConfirm: () => {
+        deleteCheck(checkId);
+        closeOverlay();
+        showToast('チェック記録を削除しました');
+        onSaved && onSaved();
+      },
+    });
+  });
+}
+
 // ---- 薪棚編集(名前・乾燥状態・乾燥開始日) ----
 export function openShelfEditSheet(shelfId, onSaved) {
   const shelf = getShelf(shelfId);
@@ -771,12 +871,50 @@ export function openAddShelfSheet(onSaved) {
           <option value="来季用">来季用</option>
         </select>
       </div>
+      <div class="field" id="new-shelf-drying-field">
+        <label>乾燥を始めたのはいつ頃?</label>
+        <div class="filter-tabs" id="drying-presets" style="flex-wrap:wrap">
+          <button type="button" data-days="0" class="active">今日から</button>
+          <button type="button" data-days="30">1ヶ月前</button>
+          <button type="button" data-days="90">3ヶ月前</button>
+          <button type="button" data-days="180">半年前</button>
+          <button type="button" data-days="365">1年以上前</button>
+        </div>
+        <button class="link-btn" style="padding:6px 0 0" id="drying-exact-toggle">正確な日付が分かる場合はこちら</button>
+        <input class="box" id="new-shelf-drying-date" type="date" style="display:none;margin-top:6px" max="${todayIso()}">
+      </div>
       ${photoFieldHtml('new-shelf-photo', null)}
       <button class="btn-primary" id="new-shelf-save">登録する</button>
     </div>
   `);
   const photo = wirePhotoField(ov, 'new-shelf-photo', null);
   wireTotalVolumeField(ov, 'new-shelf-total');
+
+  const dryingField = ov.querySelector('#new-shelf-drying-field');
+  const presetButtons = ov.querySelectorAll('#drying-presets button');
+  const dryingDateInput = ov.querySelector('#new-shelf-drying-date');
+  const statusSelect = ov.querySelector('#new-shelf-status');
+
+  const updateDryingFieldVisibility = () => {
+    dryingField.style.display = statusSelect.value === '来季用' ? 'none' : '';
+  };
+  statusSelect.addEventListener('change', updateDryingFieldVisibility);
+  updateDryingFieldVisibility();
+
+  presetButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      presetButtons.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      dryingDateInput.value = '';
+      dryingDateInput.style.display = 'none';
+    });
+  });
+  ov.querySelector('#drying-exact-toggle').addEventListener('click', () => {
+    presetButtons.forEach((b) => b.classList.remove('active'));
+    dryingDateInput.style.display = '';
+    dryingDateInput.focus();
+  });
+
   ov.querySelector('#new-shelf-save').addEventListener('click', () => {
     const name = ov.querySelector('#new-shelf-name').value.trim() || '新しい薪棚';
     const totalVolumeM3 = Math.max(0.1, Number(ov.querySelector('#new-shelf-total').value) || 1);
@@ -785,13 +923,25 @@ export function openAddShelfSheet(onSaved) {
     const usableVolumeM3 = Math.round(totalVolumeM3 * (pct / 100) * 100) / 100;
     const photoIds = [];
     if (photo.uri) photoIds.push(addPhoto({ category: '薪棚', date: todayIso(), uri: photo.uri }).id);
+
+    let dryingStartedAt = null;
+    if (status !== '来季用') {
+      if (dryingDateInput.value) {
+        dryingStartedAt = dryingDateInput.value;
+      } else {
+        const activeBtn = ov.querySelector('#drying-presets button.active');
+        const daysAgo = Number(activeBtn?.dataset.days ?? 0);
+        dryingStartedAt = daysAgo === 0 ? todayIso() : localIsoDate(new Date(Date.now() - daysAgo * 86400000));
+      }
+    }
+
     addShelf({
       name,
       status,
       totalVolumeM3,
       usableVolumeM3,
       remainingPercent: pct,
-      dryingStartedAt: status === '乾燥中' ? todayIso() : null,
+      dryingStartedAt,
       photoIds,
     });
     closeOverlay();

@@ -1,18 +1,10 @@
-import { getShelf, getChecksForShelf, addCheck, updateShelf, addPhoto, getWeatherCache, getPhotos, getProfile } from '../store.js';
-import { daysBetween, dryFriendlyDaysCount, todayIso, DRY_MOISTURE_THRESHOLD_PERCENT } from '../derive.js';
+import { getShelf, getChecksForShelf, addCheck, updateCheck, updateShelf, addPhoto, getWeatherCache, getPhotos, getProfile } from '../store.js';
+import { daysBetween, dryFriendlyDaysCount, todayIso, DRY_MOISTURE_THRESHOLD_PERCENT, CHECKLIST_ITEMS } from '../derive.js';
 import { factualTodayNote } from '../weather.js';
-import { showToast, go } from '../ui.js';
+import { showToast, go, openOverlay, closeOverlay } from '../ui.js';
 import { state, ensureCurrentShelf } from '../state.js';
-import { openShelfPickerSheet, openShelfEditSheet } from './sheets.js';
+import { openShelfPickerSheet, openShelfEditSheet, openCheckEditSheet } from './sheets.js';
 import { pickImageFile, fileToResizedDataUrl, noPhotoPlaceholderHtml } from '../photos.js';
-
-const CHECKLIST_ITEMS = [
-  { key: 'dryness', label: '乾燥状態' },
-  { key: 'pestMold', label: '虫・カビ' },
-  { key: 'leakMoisture', label: '雨漏り・湿気' },
-  { key: 'airflow', label: '通気・風通し' },
-  { key: 'stackCondition', label: '薪の崩れ・整頓' },
-];
 
 let checklistDraft = {};
 let draftShelfId = null;
@@ -140,19 +132,61 @@ export function render() {
     <div class="label-sm" style="margin-top:4px">目安:${DRY_MOISTURE_THRESHOLD_PERCENT}%以下で十分乾燥した薪とされています</div>
   `;
 
-  document.getElementById('check-history').innerHTML = history.length
+  const historyEl = document.getElementById('check-history');
+  historyEl.innerHTML = history.length
     ? history
         .map(
           (h) =>
-            `<div class="history-row"><span>${h.date}(${daysBetween(h.date)}日前)</span><span>残量${h.remainingPercent}%(約${h.usableVolumeM3}m³)${h.moisturePercent != null ? `・含水率${h.moisturePercent}%(${moistureNote(h.moisturePercent)})` : ''}</span></div>`
+            `<div class="history-row" style="cursor:pointer" data-check-id="${h.id}"><span>${h.date}(${daysBetween(h.date)}日前)</span><span>残量${h.remainingPercent}%(約${h.usableVolumeM3}m³)${h.moisturePercent != null ? `・含水率${h.moisturePercent}%(${moistureNote(h.moisturePercent)})` : ''} <svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;color:var(--muted)"><use href="#i-chevright"/></svg></span></div>`
         )
         .join('')
     : `<div class="empty">まだチェック記録がありません。</div>`;
+  historyEl.querySelectorAll('.history-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      openCheckEditSheet(row.dataset.checkId, () => render());
+    });
+  });
 }
 
 export function toggleChecklistItem(key) {
   checklistDraft[key] = checklistDraft[key] === 'good' ? 'warning' : 'good';
   render();
+}
+
+// 同じ内容かどうかの比較。項目の並び順に依存しないようキーを揃えて比較する。
+function checksEqual(a, b) {
+  if (!a || !b) return false;
+  const sameItems = CHECKLIST_ITEMS.every((i) => a.items?.[i.key] === b.items?.[i.key]);
+  return (
+    sameItems &&
+    a.remainingPercent === b.remainingPercent &&
+    a.usableVolumeM3 === b.usableVolumeM3 &&
+    a.moisturePercent === b.moisturePercent &&
+    (a.memo || '') === (b.memo || '')
+  );
+}
+
+// 同じ日に記録が既にある時、黙って上書き・黙って追加のどちらもせず選んでもらう
+// (上書きだと朝夜2回分のような別の観測が消えてしまい、常に追加だと内容が同じなのに
+// 重複が増え続けるため、どちらのトラブルも避けられるようにユーザーに確認する)。
+function openSameDayChoiceSheet({ existingDate, onOverwrite, onAddNew }) {
+  const ov = openOverlay(`
+    <div class="sheet">
+      <div class="sheet-title">今日はすでに記録があります</div>
+      <div style="font-size:calc(13px * var(--font-scale));line-height:1.7;color:var(--cream);margin-bottom:16px">${existingDate}の記録を書き換えますか?それとも別の記録として追加しますか?</div>
+      <button class="btn-primary" id="same-day-overwrite" style="margin-bottom:8px">上書きする</button>
+      <button class="btn-ghost" id="same-day-add" style="width:100%;margin-bottom:8px">別の記録として追加</button>
+      <button class="btn-ghost" data-action="close-overlay" style="width:100%">キャンセル</button>
+    </div>
+  `);
+  ov.querySelector('#same-day-overwrite').addEventListener('click', () => {
+    closeOverlay();
+    onOverwrite();
+  });
+  ov.querySelector('#same-day-add').addEventListener('click', () => {
+    closeOverlay();
+    onAddNew();
+  });
 }
 
 export function saveCheck() {
@@ -172,7 +206,7 @@ export function saveCheck() {
     shelf = getShelf(shelfId);
   }
 
-  addCheck({
+  const payload = {
     shelfId: shelf.id,
     date: todayIso(),
     remainingPercent: shelf.remainingPercent,
@@ -180,13 +214,41 @@ export function saveCheck() {
     items: { ...checklistDraft },
     moisturePercent,
     memo,
-  });
-  updateShelf(shelf.id, { lastCheckedAt: todayIso() });
+  };
 
-  document.getElementById('check-memo').value = '';
-  document.getElementById('check-moisture').value = '';
-  render();
-  showToast('チェックを記録しました');
+  const finish = (message) => {
+    updateShelf(shelf.id, { lastCheckedAt: todayIso() });
+    document.getElementById('check-memo').value = '';
+    document.getElementById('check-moisture').value = '';
+    render();
+    showToast(message);
+  };
+
+  const todayExisting = getChecksForShelf(shelf.id).find((c) => c.date === todayIso());
+
+  // 何も変わっていないのに「記録する」を押しただけなら、無意味な重複を増やさず何もしない
+  if (todayExisting && checksEqual(todayExisting, payload)) {
+    showToast('変更がないため、記録はそのままです');
+    return;
+  }
+
+  if (todayExisting) {
+    openSameDayChoiceSheet({
+      existingDate: todayExisting.date,
+      onOverwrite: () => {
+        updateCheck(todayExisting.id, payload);
+        finish('チェックを更新しました');
+      },
+      onAddNew: () => {
+        addCheck(payload);
+        finish('チェックを記録しました');
+      },
+    });
+    return;
+  }
+
+  addCheck(payload);
+  finish('チェックを記録しました');
 }
 
 export function pickShelf() {

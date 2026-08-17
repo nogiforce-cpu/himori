@@ -169,6 +169,10 @@ const ACTIONS = {
   'open-cal-day': (el) => calendar.openCalDay(el.dataset.date),
   'edit-username': () => settings.editUsername(),
   'edit-stove': () => settings.editStove(),
+  'edit-stove-photo': (el, e) => {
+    e.stopPropagation();
+    home.editStovePhoto();
+  },
   'edit-safety-line': () => settings.editSafetyLine(),
   'edit-season-target': () => settings.editSeasonTarget(),
   'open-maintenance': () => settings.openMaintenance(),

@@ -141,9 +141,8 @@ export async function fetchJmaDaily({ officeCode, class10Code, class15Code }) {
   // 気象庁の週間気温は県内1地点の代表観測点のみのため、標高差のある地域では最低気温が
   // 実態より高めに出ることがある(実測比較で確認済み)が、これは無料の公式データである以上
   // 避けられない粒度の限界として許容し、出典の一貫性・分かりやすさを優先する。
-  // なお当日分はこのブロックでは扱わない(todayIsoは常にスキップ)ため、当日の気温は
-  // 従来どおり数値予報モデルの推定値のまま(気象庁の短期予報には日別の最高/最低気温が
-  // 含まれていないため)。
+  // なお当日分はこのブロックでは扱わない(todayIsoは常にスキップ)。当日の最高気温は
+  // 下の短期予報ブロックで別途、気象庁の実況ベースの値に置き換える。
   const weeklyTempArea = extended?.timeSeries?.[1]?.areas?.[0];
   extended?.timeSeries?.[1]?.timeDefines?.forEach((t, i) => {
     const date = t.slice(0, 10);
@@ -156,6 +155,30 @@ export async function fetchJmaDaily({ officeCode, class10Code, class15Code }) {
     if (tMin != null) entry.tempMin = tMin;
     byDate.set(date, entry);
   });
+
+  // 短期予報(shortTerm.timeSeries[2])には、週間予報と同じ代表観測地点の当日気温が
+  // 含まれている。これまで当日の最高気温だけは数値予報モデル(Open-Meteo)の推定値の
+  // ままで、実測より低く出る癖のせいで実態とズレることがあった(実機で確認済み)。
+  // 同じ観測地点を使うことで、出典の一貫性も保てる。ただし午前に発表された回では
+  // 「当日の最低気温」の枠が省略されて最高気温の値が重複して入る仕様があるため、
+  // 最低気温側は誤読のリスクを避けて触らず、最高気温だけ確実な方(その日の最大値)を採用する。
+  const tempStationSeries = shortTerm?.timeSeries?.[2];
+  const weeklyStationCode = weeklyTempArea?.area?.code;
+  const tempStationArea =
+    tempStationSeries?.areas?.find((a) => a.area?.code === weeklyStationCode) || tempStationSeries?.areas?.[0];
+  if (tempStationArea) {
+    const todayTemps = [];
+    tempStationSeries.timeDefines.forEach((t, i) => {
+      if (t.slice(0, 10) !== todayIso) return;
+      const v = toNumberOrNull(tempStationArea.temps?.[i]);
+      if (v != null) todayTemps.push(v);
+    });
+    if (todayTemps.length) {
+      const entry = byDate.get(todayIso) || {};
+      entry.tempMax = Math.max(...todayTemps);
+      byDate.set(todayIso, entry);
+    }
+  }
 
   // 今日・明日は気象庁の天気文(「くもり　所により　雨」等)に実際に「雪」「雨」の
   // 文字が含まれるかで直接判定できる。週間予報(明後日以降)は文章が無く数値の
