@@ -10,7 +10,7 @@ import {
   getWeatherHistory,
   getProfile,
 } from '../store.js';
-import { lastBurnDate, todayIso, BURN_CONSUMPTION_M3 } from '../derive.js';
+import { lastBurnDate, todayIso, BURN_CONSUMPTION_M3, overallCheckState } from '../derive.js';
 import { openOverlay } from '../ui.js';
 import { state } from '../state.js';
 import { localIsoDate } from '../date-utils.js';
@@ -57,10 +57,11 @@ export function render() {
   const burnDates = new Set(burnLogs.map((b) => b.date));
   const maintDates = new Set(maintenanceLogs.map((m) => m.date));
   const photoDates = new Set(photos.map((p) => p.date));
-  // 「異常あり」だったチェックの日だけを特別扱いする(良好なチェックは日常の記録なので、
-  // マスの中で毎回目立たせる必要はない → タップした日別詳細で見れば十分)
+  // 「良好」ではなかったチェックの日だけを特別扱いする(良好なチェックは日常の記録なので、
+  // マスの中で毎回目立たせる必要はない → タップした日別詳細で見れば十分)。
+  // 「要注意」「異常あり」はどちらも良好ではない状態としてまとめてマスの縁で示す。
   const warningCheckDates = new Set(
-    allChecks.filter((c) => Object.values(c.items).some((v) => v === 'warning')).map((c) => c.date)
+    allChecks.filter((c) => overallCheckState(c.items) !== 'good').map((c) => c.date)
   );
   const seasonStartDates = new Set(seasons.map((s) => s.startDate));
   const seasonEndDates = new Set(seasons.filter((s) => s.endDate).map((s) => s.endDate));
@@ -209,10 +210,11 @@ export function openCalDay(dateIso) {
     sections.push(
       `<div class="label-sm" style="font-weight:700;margin:10px 0 4px">薪棚チェック</div>` +
         checks
-          .map(
-            (c) =>
-              `<div class="history-row"><span>${shelfName(c.shelfId)}</span><span>残量${c.remainingPercent}%</span></div>`
-          )
+          .map((c) => {
+            const state = overallCheckState(c.items);
+            const stateLabel = state === 'good' ? '良好' : state === 'attention' ? '要注意' : '異常あり';
+            return `<div class="history-row"><span>${shelfName(c.shelfId)}</span><span>残量${c.remainingPercent}%・${stateLabel}</span></div>`;
+          })
           .join('')
     );
   }

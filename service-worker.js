@@ -1,4 +1,4 @@
-const CACHE = 'himori-v40';
+const CACHE = 'himori-v41';
 const ASSETS = [
   './',
   './index.html',
@@ -25,6 +25,7 @@ const ASSETS = [
   './assets/logo-badge.svg',
   './assets/logo-icon-square.svg',
   './assets/icon-axe.png',
+  './assets/icon-woodtype.png',
   './assets/sample-woodshelf-1.jpg',
   './assets/sample-woodshelf-2.jpg',
   './assets/sample-woodshelf-3.jpg',

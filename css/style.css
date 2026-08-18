@@ -98,7 +98,8 @@ svg.icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;s
 .checklist-item .name{flex:1;font-size:calc(13px * var(--font-scale))}
 .toggle-pill{display:flex;align-items:center;gap:4px;font-size:calc(11px * var(--font-scale));font-weight:700;padding:7px 10px;border-radius:999px;border:0;cursor:pointer;min-height:32px}
 .toggle-pill.good{color:var(--green);background:rgba(154,196,106,.12)}
-.toggle-pill.warning{color:#e08a68;background:rgba(181,80,46,.2)}
+.toggle-pill.attention{color:var(--ember);background:rgba(217,119,50,.16)}
+.toggle-pill.warning{color:var(--red);background:rgba(181,80,46,.24)}
 .history-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #262922;font-size:calc(12px * var(--font-scale))}
 .history-row:last-child{border-bottom:0}
 /* メンテナンス記録を種類ごとに区切って表示するグループ(煙突掃除・ガスケット交換など、
@@ -163,6 +164,15 @@ svg.icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;s
 .num-field-row .new-value input.box::placeholder{font-size:calc(13px * var(--font-scale));color:var(--muted)}
 .num-field-row .new-value .label-sm{font-size:calc(16px * var(--font-scale));font-weight:700;color:var(--khaki)}
 .stepper{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border-radius:9px;padding:8px 12px}
+
+/* 0〜100%の入力は、キーボードでの自由入力よりスライダーの方が指1本で直感的に決められる。
+   トラックはember色で埋まった分を可視化し、つまみは大きめにして指で掴みやすくする。 */
+.pct-slider-row{display:flex;align-items:center;gap:14px;background:var(--surface);border-radius:9px;padding:14px 14px}
+.pct-slider{flex:1;-webkit-appearance:none;appearance:none;height:6px;border-radius:999px;background:var(--gunmetal);outline:none;cursor:pointer}
+.pct-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:26px;height:26px;border-radius:50%;background:var(--ember);border:3px solid var(--cream);cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.pct-slider::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--ember);border:3px solid var(--cream);cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.pct-slider::-moz-range-track{height:6px;border-radius:999px;background:var(--gunmetal)}
+.pct-slider-readout{font-size:calc(19px * var(--font-scale));font-weight:800;color:var(--cream);min-width:52px;text-align:right;font-variant-numeric:tabular-nums;flex-shrink:0}
 .stepper button{width:36px;height:36px;border-radius:8px;border:1px solid #4a4d40;background:transparent;color:var(--cream);font-size:calc(16px * var(--font-scale));cursor:pointer}
 textarea.box{width:100%;border:0;resize:none;font-family:inherit;color:var(--cream);min-height:56px;background:transparent}
 /* メッセージ行とアクションボタン行を縦に積む構成。1つのflex行に全部詰め込むと、
@@ -188,9 +198,10 @@ textarea.box{width:100%;border:0;resize:none;font-family:inherit;color:var(--cre
     repeating-linear-gradient(112deg, rgba(0,0,0,.05) 0 1px, transparent 1px 3px),
     linear-gradient(160deg,var(--leather-1),var(--leather-2))}
 :root[data-theme="light"] .leather::after{border-color:rgba(58,44,20,.25)}
-.brand-header{display:flex;align-items:flex-end;justify-content:space-between;padding:calc(env(safe-area-inset-top,10px) + 6px) 16px 12px;border-bottom:2px solid var(--leather-line);box-shadow:inset 0 -8px 14px -10px rgba(0,0,0,.6)}
-.brand-header .iconbtn{color:var(--leather-text)}
-.brand-block{flex:1;margin-left:6px;text-align:left}
+.brand-header{display:flex;align-items:center;justify-content:space-between;padding:calc(env(safe-area-inset-top,10px) + 6px) 12px 12px;border-bottom:2px solid var(--leather-line);box-shadow:inset 0 -8px 14px -10px rgba(0,0,0,.6)}
+.brand-header .iconbtn{color:var(--leather-text);width:52px;height:52px;flex-shrink:0}
+.brand-header .iconbtn svg.icon{width:26px;height:26px}
+.brand-block{flex:1;display:flex;justify-content:center;text-align:left}
 .brand-name{font-size:calc(19px * var(--font-scale));font-weight:700;letter-spacing:.5px}
 .brand-sub{font-size:calc(9px * var(--font-scale));color:var(--leather-text);letter-spacing:1px;margin-top:2px}
 

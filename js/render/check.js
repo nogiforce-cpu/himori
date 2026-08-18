@@ -1,9 +1,9 @@
 import { getShelf, getChecksForShelf, addCheck, updateCheck, updateShelf, addPhoto, getWeatherCache, getPhotos, getProfile } from '../store.js';
-import { daysBetween, dryFriendlyDaysCount, todayIso, DRY_MOISTURE_THRESHOLD_PERCENT, CHECKLIST_ITEMS } from '../derive.js';
+import { daysBetween, dryFriendlyDaysCount, todayIso, DRY_MOISTURE_THRESHOLD_PERCENT, CHECKLIST_ITEMS, CHECK_STATE_LABELS, nextCheckState } from '../derive.js';
 import { factualTodayNote } from '../weather.js';
 import { showToast, go, openOverlay, closeOverlay } from '../ui.js';
 import { state, ensureCurrentShelf } from '../state.js';
-import { openShelfPickerSheet, openShelfEditSheet, openCheckEditSheet } from './sheets.js';
+import { openShelfPickerSheet, openShelfEditSheet, openCheckEditSheet, openPhotoZoomSheet, percentSliderHtml, wirePercentSlider } from './sheets.js';
 import { pickImageFile, fileToResizedDataUrl, noPhotoPlaceholderHtml } from '../photos.js';
 
 let checklistDraft = {};
@@ -71,9 +71,9 @@ export function render() {
       <div class="checklist-item">
         <span class="ico"><svg class="icon" viewBox="0 0 24 24" style="width:15px;height:15px"><use href="#i-check"/></svg></span>
         <span class="name">${item.label}</span>
-        <button class="toggle-pill ${val === 'good' ? 'good' : 'warning'}" data-action="toggle-check-item" data-key="${item.key}">
+        <button class="toggle-pill ${val}" data-action="toggle-check-item" data-key="${item.key}">
           <svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px"><use href="#${val === 'good' ? 'i-check' : 'i-info'}"/></svg>
-          ${val === 'good' ? '良好' : '異常あり'}
+          ${CHECK_STATE_LABELS[val]}
         </button>
       </div>`;
   }).join('');
@@ -83,27 +83,22 @@ export function render() {
 
   const refPhoto = shelf.referencePhotoId ? getPhotos().find((p) => p.id === shelf.referencePhotoId) : null;
   document.getElementById('check-residual').innerHTML = `
-    <div class="label-sm" style="margin-bottom:2px;font-weight:700">残量の記録</div>
-    <div class="label-sm" style="margin-bottom:8px">残量はここでチェックした時だけ更新されます(「今日、焚いた」では変わりません)</div>
-    <div class="row" style="align-items:flex-start;gap:10px">
-      <div class="photo-ph" id="check-ref-photo" style="width:64px;height:64px;flex-shrink:0;cursor:pointer">
-        ${refPhoto ? `<img src="${refPhoto.uri}" alt="">` : `<svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px"><use href="#i-camera"/></svg>`}
+    <div class="label-sm" style="margin-bottom:8px;font-weight:700">残量の記録</div>
+    <div class="row" style="align-items:flex-start;gap:12px;margin-bottom:12px">
+      <div class="photo-ph" id="check-ref-photo" style="width:92px;height:92px;flex-shrink:0;cursor:pointer">
+        ${refPhoto ? `<img src="${refPhoto.uri}" alt="">` : `<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><use href="#i-camera"/></svg>`}
       </div>
-      <div style="flex:1">
+      <div style="flex:1;padding-top:2px">
         <div class="label-sm" style="margin-bottom:4px">満タン(100%)時点の写真</div>
-        <button class="link-btn" style="padding:0" id="check-set-ref-photo">${refPhoto ? '撮り直す' : '登録する'}</button>
-        <div class="label-sm" style="margin-top:6px">見比べながら、実際の残量を自己申告で記録できます</div>
+        ${refPhoto ? `<div class="label-sm" style="margin-bottom:6px">タップで拡大して見比べられます</div>` : ''}
+        <button class="link-btn" style="padding:0" id="check-set-ref-photo">${refPhoto ? '撮り直す' : 'タップして登録する'}</button>
       </div>
     </div>
-    <div class="field" style="margin-top:10px;margin-bottom:0">
-      <label>実際の残量(%、空欄なら前回の記録${shelf.remainingPercent}%のまま)</label>
-      <div class="box num-field-row">
-        <div class="prev-value">前回<b>${shelf.remainingPercent}%</b></div>
-        <svg class="icon arrow-ic" viewBox="0 0 24 24" style="width:16px;height:16px"><use href="#i-chevright"/></svg>
-        <div class="new-value"><input class="box" style="padding:0" type="number" id="check-residual-pct" min="0" max="100" step="1" placeholder="${shelf.remainingPercent}"><span class="label-sm">%</span></div>
-      </div>
+    <div class="field" style="margin-bottom:0">
+      ${percentSliderHtml('check-residual-pct', shelf.remainingPercent, '実際の残量(写真と見比べて合わせてください)')}
     </div>
   `;
+  wirePercentSlider(document, 'check-residual-pct');
   const setRefPhoto = async () => {
     const file = await pickImageFile();
     if (!file) return;
@@ -113,7 +108,10 @@ export function render() {
     render();
   };
   document.getElementById('check-set-ref-photo').addEventListener('click', setRefPhoto);
-  document.getElementById('check-ref-photo').addEventListener('click', setRefPhoto);
+  document.getElementById('check-ref-photo').addEventListener('click', () => {
+    if (refPhoto) openPhotoZoomSheet(refPhoto.uri);
+    else setRefPhoto();
+  });
 
   // 含水率は数字だけ見せても「良いのか悪いのか」判断できないため、一般的な目安
   // (20%以下で十分乾燥)と比べた良好/やや高めの評価を添える。
@@ -149,7 +147,7 @@ export function render() {
 }
 
 export function toggleChecklistItem(key) {
-  checklistDraft[key] = checklistDraft[key] === 'good' ? 'warning' : 'good';
+  checklistDraft[key] = nextCheckState(checklistDraft[key]);
   render();
 }
 
@@ -197,14 +195,12 @@ export function saveCheck() {
   const moistureRaw = document.getElementById('check-moisture').value;
   const moisturePercent = moistureRaw === '' ? null : Math.max(0, Math.min(60, Number(moistureRaw)));
 
-  // 自己申告の残量%が入力されていれば、計算値を上書きする(写真と見比べての目視補正)
-  const residualRaw = document.getElementById('check-residual-pct').value;
-  if (residualRaw !== '') {
-    const pct = Math.max(0, Math.min(100, Number(residualRaw)));
-    const usable = Math.round(((shelf.totalVolumeM3 * pct) / 100) * 100) / 100;
-    updateShelf(shelf.id, { remainingPercent: Math.round(pct), usableVolumeM3: usable });
-    shelf = getShelf(shelfId);
-  }
+  // 自己申告の残量%(写真と見比べての目視補正)。スライダーは常に値を持つので、
+  // 動かしていなければ今の残量のまま=実質的な変更なしとして扱われる。
+  const pct = Math.max(0, Math.min(100, Number(document.getElementById('check-residual-pct').value)));
+  const usable = Math.round(((shelf.totalVolumeM3 * pct) / 100) * 100) / 100;
+  updateShelf(shelf.id, { remainingPercent: pct, usableVolumeM3: usable });
+  shelf = getShelf(shelfId);
 
   const payload = {
     shelfId: shelf.id,

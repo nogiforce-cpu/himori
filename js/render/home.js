@@ -186,7 +186,16 @@ function offSeasonTip({ weather, shelves, allChecks, maintenanceLogs, woodTypeCa
   if (!lastMaint || daysBetween(lastMaint.date) >= 300) {
     candidates.push('ストーブのメンテナンス(煙突掃除やガスケットの状態)を確認するのに良い時期です。');
   }
-  candidates.push('オフシーズンです。薪棚チェックやストーブのメンテナンスをしておくと、シーズン入りがスムーズです。');
+  // 締めの一言は複数の言い回しを用意し、日替わりで表情を変える(元の実装は1本だけだった
+  // 枠を、複数の視点で書いた文の中から日替わりで1本選ぶ形にする。他の具体的な候補を
+  // 薄めすぎないよう、この枠自体は依然として1つ分のままにする)。
+  const closingLines = [
+    'オフシーズンです。薪棚チェックやストーブのメンテナンスをしておくと、シーズン入りがスムーズです。',
+    '火を入れていない時期こそ、薪と道具の状態がよく見えるものです。',
+    '良い薪は、シーズンが始まってから慌てて作るものではなく、オフシーズンの今つくられています。',
+    '静かな季節ですが、暖炉のある暮らしはこの時期の下ごしらえで決まります。',
+  ];
+  candidates.push(closingLines[dayOfYear(todayIso()) % closingLines.length]);
 
   return candidates[dayOfYear(todayIso()) % candidates.length];
 }
@@ -204,18 +213,35 @@ function hitokoto(ctx) {
     return 'しばらく焚いていないようです。無理のない範囲で薪棚の様子を見ておくと安心です。';
   }
   if (!shelf) return '薪棚がまだ登録されていません。「薪を追加」から始めましょう。';
+  // 状態ごとの一言も、日替わりで複数の言い回しから選ぶ(同じ状態が続く間ずっと
+  // 同じ一文が表示され続けると単調なため。いずれも他者の発言の引用ではなくオリジナル)。
+  const rotate = (lines) => lines[dayOfYear(todayIso()) % lines.length];
   const parts = [];
   if (score >= 70) {
-    parts.push('しっかり焚けるだけの蓄えがあります。');
+    parts.push(
+      rotate([
+        'しっかり焚けるだけの蓄えがあります。',
+        'この量なら、多少の寒波が来ても慌てずに済みます。',
+        '在庫としては上出来です。あとは乾燥が進むのを待つだけです。',
+      ])
+    );
   } else if (score >= 40) {
     const daysSinceCheck = lastCheckDate ? daysBetween(lastCheckDate) : null;
     if (daysSinceCheck == null || daysSinceCheck >= 14) {
-      parts.push('今のところは焚けますが、薪棚チェック(乾燥状態・虫カビ・雨漏りなど)をしておくとより安心です。');
+      parts.push(
+        rotate([
+          '今のところは焚けますが、薪棚チェック(乾燥状態・虫カビ・雨漏りなど)をしておくとより安心です。',
+          '焚く分には困らない量ですが、しばらく棚を見ていないなら一度様子を確認しておきたいところです。',
+          '量は足りていますが、質(乾燥具合)は見た目では分かりません。チェックしておくと安心です。',
+        ])
+      );
     } else {
-      parts.push('今のところは焚けます。');
+      parts.push(rotate(['今のところは焚けます。', '今のところは順調です。', '今日も問題なく焚けそうです。']));
     }
   } else {
-    parts.push('残量が少なめです。');
+    parts.push(
+      rotate(['残量が少なめです。', 'そろそろ棚の底が見えてきた頃合いです。', '在庫は薄めです。'])
+    );
   }
   const peakRisk = weather ? upcoming48hRisk(weather.daily) : null;
   if (peakRisk) parts.push('冷え込みや雨の予報があるので、多めに運んでおくと安心です。');
@@ -341,7 +367,11 @@ export function render() {
       <div style="font-size:calc(10px * var(--font-scale));color:var(--leather-text);letter-spacing:.5px">薪ストーブ</div>
       <div class="slab" style="font-size:calc(14px * var(--font-scale));font-weight:700">${profile.stove.name}</div>
     </div>
-    ${years ? `<div style="font-size:calc(9px * var(--font-scale));color:#d9c6a8;border:1px solid rgba(242,234,214,.25);padding:3px 7px;border-radius:4px">使用${years}年目</div>` : ''}
+    ${years ? `<div style="font-size:calc(9px * var(--font-scale));color:#d9c6a8;border:1px solid rgba(242,234,214,.25);padding:3px 7px;border-radius:4px;flex-shrink:0">使用${years}年目</div>` : ''}
+    <div style="display:flex;align-items:center;gap:2px;flex-shrink:0;color:var(--leather-text)">
+      <span style="font-size:calc(10px * var(--font-scale));white-space:nowrap">メンテ記録</span>
+      <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg>
+    </div>
   `;
 }
 

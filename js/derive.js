@@ -13,6 +13,23 @@ export const CHECKLIST_ITEMS = [
   { key: 'stackCondition', label: '薪の崩れ・整頓' },
 ];
 
+// チェック項目の評価。「良好/異常あり」の二択だと、はっきり異常とまでは言えないが
+// 気になる、というありがちな状態を記録しづらいため、間に「要注意」を挟んだ3段階にする。
+export const CHECK_STATE_ORDER = ['good', 'attention', 'warning'];
+export const CHECK_STATE_LABELS = { good: '良好', attention: '要注意', warning: '異常あり' };
+export function nextCheckState(current) {
+  const idx = CHECK_STATE_ORDER.indexOf(current);
+  return CHECK_STATE_ORDER[(idx + 1) % CHECK_STATE_ORDER.length];
+}
+// 複数項目のうち最も深刻な状態を、その回のチェック全体の代表状態とする
+// (カレンダーの表示・週次まとめの一覧など、1つの記録を1つの状態で要約したい場面で使う)。
+export function overallCheckState(items) {
+  const values = Object.values(items || {});
+  if (values.includes('warning')) return 'warning';
+  if (values.includes('attention')) return 'attention';
+  return 'good';
+}
+
 export function barColor(pct) {
   if (pct <= 35) return 'var(--red)';
   if (pct <= 55) return 'var(--ember)';
@@ -203,6 +220,7 @@ export function weeklyStats(range, { burnLogs, woodAdditions, anshinHistory, spl
     burnCount: burnsInWeek.length,
     usedVolumeM3: Math.round(usedVolume * 100) / 100,
     anshinDelta,
+    currentScore: endScore,
     checksInWeek,
     splitCount: splitsInWeek.length,
     splitVolumeM3: Math.round(splitsInWeek.reduce((s, e) => s + (e.volumeM3 || 0), 0) * 100) / 100,

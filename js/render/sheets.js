@@ -19,11 +19,12 @@ import {
   deleteWoodTypeFromCatalog,
   getMaintenanceLogs,
   addMaintenanceLog,
+  updateMaintenanceLog,
   getChecks,
   updateCheck,
   deleteCheck,
 } from '../store.js';
-import { applyWoodAddition, todayIso, daysBetween, CHECKLIST_ITEMS } from '../derive.js';
+import { applyWoodAddition, todayIso, daysBetween, CHECKLIST_ITEMS, CHECK_STATE_LABELS, nextCheckState } from '../derive.js';
 import { localIsoDate } from '../date-utils.js';
 import { pickImageFile, fileToResizedDataUrl } from '../photos.js';
 import { resolveLocationFromCity, fetchCitiesForPrefecture, PREFECTURES } from '../weather.js';
@@ -68,6 +69,43 @@ function wirePhotoField(ov, id, existingUri) {
     ov.querySelector(`#${id}-remove`)?.remove();
   });
   return state;
+}
+
+// ---- 汎用: 0〜100%のスライダー入力 ----
+// 「残量」「今どれくらい入っているか」のような0〜100%の値は、キーボードでの自由入力より
+// スライダーを指でなぞる方が速く直感的なため、%を扱う入力欄はこれに統一する。
+export function percentSliderHtml(id, value = 0, labelText = null) {
+  const v = Math.max(0, Math.min(100, Math.round(value)));
+  return `
+    ${labelText ? `<label>${labelText}</label>` : ''}
+    <div class="pct-slider-row">
+      <input type="range" min="0" max="100" step="1" value="${v}" id="${id}" class="pct-slider">
+      <div class="pct-slider-readout" id="${id}-readout">${v}%</div>
+    </div>`;
+}
+
+export function wirePercentSlider(root, id) {
+  const input = root.querySelector(`#${id}`);
+  const readout = root.querySelector(`#${id}-readout`);
+  const paint = () => {
+    input.style.background = `linear-gradient(to right, var(--ember) ${input.value}%, var(--gunmetal) ${input.value}%)`;
+    if (readout) readout.textContent = `${input.value}%`;
+  };
+  input.addEventListener('input', paint);
+  paint();
+  return input;
+}
+
+// ---- 汎用: 写真を拡大して見るだけ(差し替え・削除はしない) ----
+// 満タン写真と今の薪棚を見比べる時など、「タップしたら差し替わってしまう」事故を避けつつ
+// 大きく見たいだけの場面で使う軽量シート。
+export function openPhotoZoomSheet(uri) {
+  openOverlay(`
+    <div class="sheet">
+      <div class="row" style="margin-bottom:10px"><span class="sheet-title" style="margin-bottom:0">写真を見る</span><button class="iconbtn" data-action="close-overlay"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></div>
+      <div class="photo-ph" style="height:min(70vh,420px)"><img src="${uri}" alt="" style="width:100%;height:100%;object-fit:contain"></div>
+    </div>
+  `);
 }
 
 // ---- 汎用: 薪棚の総容量入力(直接入力 or 寸法から自動計算) ----
@@ -711,8 +749,7 @@ export function openCheckEditSheet(checkId, onSaved) {
       </div>
       <div id="check-edit-items" style="margin-bottom:6px"></div>
       <div class="field">
-        <label>残量(%)</label>
-        <input class="box" id="check-edit-pct" type="number" min="0" max="100" value="${check.remainingPercent}">
+        ${percentSliderHtml('check-edit-pct', check.remainingPercent, '残量(%)')}
       </div>
       <div class="field">
         <label>含水率(%・任意)</label>
@@ -728,6 +765,7 @@ export function openCheckEditSheet(checkId, onSaved) {
       </div>
     </div>
   `);
+  wirePercentSlider(ov, 'check-edit-pct');
 
   function drawItems() {
     ov.querySelector('#check-edit-items').innerHTML = CHECKLIST_ITEMS.map((item) => {
@@ -735,14 +773,14 @@ export function openCheckEditSheet(checkId, onSaved) {
       return `
         <div class="checklist-item">
           <span class="name">${item.label}</span>
-          <button class="toggle-pill ${val === 'good' ? 'good' : 'warning'}" type="button" data-key="${item.key}">
-            ${val === 'good' ? '良好' : '異常あり'}
+          <button class="toggle-pill ${val}" type="button" data-key="${item.key}">
+            ${CHECK_STATE_LABELS[val]}
           </button>
         </div>`;
     }).join('');
     ov.querySelectorAll('#check-edit-items .toggle-pill').forEach((btn) => {
       btn.addEventListener('click', () => {
-        items[btn.dataset.key] = items[btn.dataset.key] === 'good' ? 'warning' : 'good';
+        items[btn.dataset.key] = nextCheckState(items[btn.dataset.key]);
         drawItems();
       });
     });
@@ -860,8 +898,7 @@ export function openAddShelfSheet(onSaved) {
       </div>
       ${totalVolumeFieldHtml('new-shelf-total', 1)}
       <div class="field">
-        <label>今、どれくらい入っていますか(%)</label>
-        <input class="box" id="new-shelf-pct" type="number" min="0" max="100" value="0">
+        ${percentSliderHtml('new-shelf-pct', 0, '今、どれくらい入っていますか(%)')}
       </div>
       <div class="field">
         <label>乾燥状態</label>
@@ -889,6 +926,7 @@ export function openAddShelfSheet(onSaved) {
   `);
   const photo = wirePhotoField(ov, 'new-shelf-photo', null);
   wireTotalVolumeField(ov, 'new-shelf-total');
+  wirePercentSlider(ov, 'new-shelf-pct');
 
   const dryingField = ov.querySelector('#new-shelf-drying-field');
   const presetButtons = ov.querySelectorAll('#drying-presets button');
@@ -971,24 +1009,35 @@ export function openStoveEditSheet(onSaved) {
       </div>
       <div class="field">
         <label>触媒交換時期</label>
-        <input class="box" id="stove-edit-catalyst" type="date" value="${stove.catalystReplacedAt ?? ''}">
+        <input class="box" id="stove-edit-catalyst" type="date" value="${stove.catalystReplacedAt ?? ''}" ${stove.hasCatalyst === false ? 'disabled' : ''}>
+        <label style="display:flex;align-items:center;gap:7px;margin-top:8px;font-weight:400">
+          <input type="checkbox" id="stove-edit-no-catalyst" ${stove.hasCatalyst === false ? 'checked' : ''} style="width:16px;height:16px">
+          この機種には触媒がない
+        </label>
       </div>
       ${photoFieldHtml('stove-edit-photo', existingUri)}
       <button class="btn-primary" id="stove-edit-save">保存する</button>
     </div>
   `);
   const photo = wirePhotoField(ov, 'stove-edit-photo', existingUri);
+  const catalystInput = ov.querySelector('#stove-edit-catalyst');
+  const noCatalystBox = ov.querySelector('#stove-edit-no-catalyst');
+  noCatalystBox.addEventListener('change', () => {
+    catalystInput.disabled = noCatalystBox.checked;
+    if (noCatalystBox.checked) catalystInput.value = '';
+  });
   ov.querySelector('#stove-edit-save').addEventListener('click', () => {
     const name = ov.querySelector('#stove-edit-name').value.trim() || stove.name;
     const purchaseDate = ov.querySelector('#stove-edit-purchase').value || null;
-    const catalystReplacedAt = ov.querySelector('#stove-edit-catalyst').value || null;
+    const hasCatalyst = !noCatalystBox.checked;
+    const catalystReplacedAt = hasCatalyst ? catalystInput.value || null : null;
     let photoId = stove.photoId ?? null;
     if (photo.uri === '') {
       photoId = null;
     } else if (photo.uri) {
       photoId = addPhoto({ category: 'ストーブ', date: todayIso(), uri: photo.uri }).id;
     }
-    updateProfile({ stove: { ...stove, name, purchaseDate, catalystReplacedAt, photoId } });
+    updateProfile({ stove: { ...stove, name, purchaseDate, catalystReplacedAt, hasCatalyst, photoId } });
     closeOverlay();
     showToast('薪ストーブ情報を保存しました');
     onSaved && onSaved();
@@ -1053,6 +1102,28 @@ function maintenanceHistoryHtml() {
     .join('');
 }
 
+// 薪棚チェックと同じ考え方: 同じ日・同じ種類の記録が既にある時、黙って上書き・黙って
+// 追加のどちらもせず選んでもらう(連打による無意味な重複と、別の記録が消える事故の両方を防ぐ)。
+function openSameDayMaintChoiceSheet({ onOverwrite, onAddNew }) {
+  const ov = openOverlay(`
+    <div class="sheet">
+      <div class="sheet-title">この種類は今日すでに記録があります</div>
+      <div style="font-size:calc(13px * var(--font-scale));line-height:1.7;color:var(--cream);margin-bottom:16px">今日の記録を書き換えますか?それとも別の記録として追加しますか?</div>
+      <button class="btn-primary" id="maint-same-day-overwrite" style="margin-bottom:8px">上書きする</button>
+      <button class="btn-ghost" id="maint-same-day-add" style="width:100%;margin-bottom:8px">別の記録として追加</button>
+      <button class="btn-ghost" data-action="close-overlay" style="width:100%">キャンセル</button>
+    </div>
+  `);
+  ov.querySelector('#maint-same-day-overwrite').addEventListener('click', () => {
+    closeOverlay();
+    onOverwrite();
+  });
+  ov.querySelector('#maint-same-day-add').addEventListener('click', () => {
+    closeOverlay();
+    onAddNew();
+  });
+}
+
 export function openMaintenanceSheet(onSaved) {
   function draw() {
     const ov = document.querySelector('[data-dynamic-overlay="true"]');
@@ -1096,6 +1167,14 @@ export function openMaintenanceSheet(onSaved) {
     customField.style.display = typeSelect.value === 'その他' ? '' : 'none';
   });
   const photo = wirePhotoField(ov, 'maint-photo', null);
+
+  function resetForm() {
+    ov.querySelector('#maint-memo').value = '';
+    ov.querySelector('#maint-custom-type').value = '';
+    photo.uri = null;
+    ov.querySelector('#maint-photo').innerHTML = `<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><use href="#i-camera"/></svg>`;
+  }
+
   ov.querySelector('#maint-save-btn').addEventListener('click', () => {
     const date = ov.querySelector('#maint-date').value || todayIso();
     const selected = typeSelect.value;
@@ -1103,14 +1182,39 @@ export function openMaintenanceSheet(onSaved) {
     const type = selected === 'その他' && customType ? customType : selected;
     const memo = ov.querySelector('#maint-memo').value.trim();
     const photoId = photo.uri ? addPhoto({ category: 'メンテ', date, uri: photo.uri }).id : null;
-    addMaintenanceLog({ date, type, memo, photoId });
-    ov.querySelector('#maint-memo').value = '';
-    ov.querySelector('#maint-custom-type').value = '';
-    photo.uri = null;
-    ov.querySelector('#maint-photo').innerHTML = `<svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><use href="#i-camera"/></svg>`;
-    showToast('メンテナンス記録を保存しました');
-    draw();
-    onSaved && onSaved();
+    const payload = { date, type, memo, photoId };
+
+    const finish = (message) => {
+      resetForm();
+      showToast(message);
+      draw();
+      onSaved && onSaved();
+    };
+
+    // 同じ日・同じ種類の記録が既にある時は、連打でそのまま重複が増えないよう
+    // 薪棚チェックと同じ考え方で確認する(別の種類のメンテを同じ日にした場合は別記録として扱う)。
+    const existing = getMaintenanceLogs().find((m) => m.date === date && m.type === type);
+    if (existing) {
+      const same = existing.memo === memo && existing.photoId === photoId;
+      if (same) {
+        showToast('変更がないため、記録はそのままです');
+        return;
+      }
+      openSameDayMaintChoiceSheet({
+        onOverwrite: () => {
+          updateMaintenanceLog(existing.id, payload);
+          finish('メンテナンス記録を更新しました');
+        },
+        onAddNew: () => {
+          addMaintenanceLog(payload);
+          finish('メンテナンス記録を保存しました');
+        },
+      });
+      return;
+    }
+
+    addMaintenanceLog(payload);
+    finish('メンテナンス記録を保存しました');
   });
   draw();
 }

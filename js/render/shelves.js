@@ -3,6 +3,7 @@ import { barColor, daysBetween, shouldShowDryAdvisory, moistureDisplayText } fro
 import { go } from '../ui.js';
 import { state } from '../state.js';
 import { noPhotoPlaceholderHtml } from '../photos.js';
+import { openShelfEditSheet } from './sheets.js';
 
 function statusBadgeColor(status) {
   if (status === '乾燥済み') return 'green';
@@ -74,7 +75,7 @@ export function render() {
           ${advisory}
           ${isMain || s.status === '来季用' ? '' : `<button class="link-btn" style="padding:6px 0 0" data-action="set-main-shelf" data-shelf-id="${s.id}">レギュラーにする</button>`}
         </div>
-        <span class="chev"><svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px"><use href="#i-chevright"/></svg></span>
+        <button class="iconbtn" data-action="edit-shelf-from-list" data-shelf-id="${s.id}" style="flex-shrink:0"><svg class="icon" viewBox="0 0 24 24" style="width:17px;height:17px"><use href="#i-edit"/></svg></button>
       </div>`;
     })
     .join('');
@@ -88,4 +89,11 @@ export function setFilter(filter) {
 export function openShelfCheck(shelfId) {
   state.currentShelfId = shelfId;
   go('check');
+}
+
+// 薪棚一覧のカードから直接、乾燥状態(乾燥中/乾燥済み/来季用)などを編集できるようにする。
+// 以前はチェック画面の鉛筆アイコンからしか編集できず、特にステータスの手動変更(翌シーズンに
+// 再利用する薪棚の状態を戻すなど)にたどり着きにくかったため、一覧からも直接開けるようにする。
+export function editShelfFromList(shelfId) {
+  openShelfEditSheet(shelfId, () => render());
 }

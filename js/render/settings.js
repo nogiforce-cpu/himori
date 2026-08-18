@@ -53,7 +53,12 @@ export function render() {
 
   document.getElementById('settings-profile').innerHTML = `
     <div class="settings-row" data-action="edit-username" style="border-bottom-color:rgba(242,234,214,.14)"><span>ユーザー名</span><span class="v">${profile.userName} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
+  `;
+
+  document.getElementById('settings-stove').innerHTML = `
     <div class="settings-row" data-action="edit-stove"><span>愛機ストーブ</span><span class="v slab">${profile.stove.name} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
+    <div class="settings-row" data-action="edit-chimney"><span>次回煙突掃除予定日</span><span class="v">${profile.nextChimneyCleaning ?? '未設定'} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
+    <div class="settings-row" data-action="open-maintenance"><span>メンテナンス記録</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
   `;
 
   document.getElementById('settings-basic').innerHTML = `
@@ -64,8 +69,6 @@ export function render() {
     <div class="settings-row" data-action="toggle-theme"><span>テーマ設定</span><span class="v">${profile.theme === 'light' ? 'ライト' : 'ダーク'}<button class="switch ${profile.theme === 'light' ? 'on' : ''}"></button></span></div>
     <div class="settings-row" data-action="cycle-text-size"><span>文字サイズ</span><span class="v">${TEXT_SIZE_LABELS[profile.textSize || 'normal']} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
     <div class="settings-row" data-action="edit-location"><span>お住まいの地域(天気連動)</span><span class="v">${profile.location ? `${profile.location.prefecture}${profile.location.city}` : '未設定'} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
-    <div class="settings-row" data-action="edit-chimney"><span>次回煙突掃除予定日</span><span class="v">${profile.nextChimneyCleaning ?? '未設定'} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
-    <div class="settings-row" data-action="open-maintenance"><span>メンテナンス記録</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
   `;
 
   const lastExport = localStorage.getItem(LAST_EXPORT_KEY);
@@ -151,7 +154,7 @@ export function editSafetyLine() {
   const profile = getProfile();
   openEditSheet({
     title: '安心ライン設定',
-    description: '使える薪の合計がこの量を下回ったら、ホーム画面で注意を表示します。「そろそろ買い足す・割っておく」の目安にしてください。',
+    description: '使える薪の合計がこの量を下回ったら、ホーム画面で注意を表示します。そろそろ補充を考えるタイミング、という目安にしてください。',
     fields: [{ key: 'safetyLineM3', label: '安心ラインの残量(m³)', type: 'number', value: profile.safetyLineM3 }],
     onSave: (v) => {
       updateProfile({ safetyLineM3: v.safetyLineM3 ?? profile.safetyLineM3 });

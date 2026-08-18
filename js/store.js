@@ -49,7 +49,7 @@ function seedIfEmpty() {
 
   const profile = {
     userName: 'ゲスト',
-    stove: { name: 'マイストーブ', purchaseDate: null, catalystReplacedAt: null, photoId: null },
+    stove: { name: 'マイストーブ', purchaseDate: null, catalystReplacedAt: null, hasCatalyst: true, photoId: null },
     unit: 'm3',
     safetyLineM3: 2.2,
     seasonTargetM3: 4.6,
@@ -333,6 +333,14 @@ export function addMaintenanceLog(entry) {
   list.sort((a, b) => (a.date < b.date ? 1 : -1));
   writeJSON(KEYS.maintenanceLogs, list);
   return record;
+}
+export function updateMaintenanceLog(id, patch) {
+  const list = getMaintenanceLogs();
+  const idx = list.findIndex((m) => m.id === id);
+  if (idx === -1) return null;
+  list[idx] = { ...list[idx], ...patch };
+  writeJSON(KEYS.maintenanceLogs, list);
+  return list[idx];
 }
 
 // ---- シーズン(火入れ期間) ----

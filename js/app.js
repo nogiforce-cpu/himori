@@ -150,6 +150,7 @@ const ACTIONS = {
   'open-add-shelf': () => openAddShelfSheet(renderAll),
   'open-woodtypes': () => openWoodTypeCollectionSheet(),
   'open-shelf-check': (el) => shelves.openShelfCheck(el.dataset.shelfId),
+  'edit-shelf-from-list': (el) => shelves.editShelfFromList(el.dataset.shelfId),
   'pick-shelf': () => check.pickShelf(),
   'edit-shelf': () => check.editShelf(),
   'toggle-check-item': (el) => check.toggleChecklistItem(el.dataset.key),
