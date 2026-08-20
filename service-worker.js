@@ -1,4 +1,4 @@
-const CACHE = 'himori-v41';
+const CACHE = 'himori-v42';
 const ASSETS = [
   './',
   './index.html',

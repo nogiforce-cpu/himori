@@ -253,10 +253,37 @@ export function summaryText(stats, offSeason) {
 }
 
 
-// 乾燥に適した日(低湿度・降水なし)のカウント。予測日数には使わず参考表示のみ(取得したdailyは今日から先の予報)
+// 平衡含水率(EMC): ある気温・湿度の空気の中に木材を置き続けたら、最終的に何%の
+// 含水率で釣り合うかを表す値。米国森林製品研究所(Forest Products Laboratory)の
+// Wood Handbookが採用するSimpson(1973)の近似式。「湿度が高くても気温が高ければ
+// 乾きやすい」という体感を、固定の湿度しきい値ではなく物理的な根拠のある1つの
+// 数値に落とし込むために使う。既知の参考値(70°F/50%RHで約9%等)で検算済み。
+function equilibriumMoistureContent(tempC, rhPercent) {
+  const T = (tempC * 9) / 5 + 32; // 式が華氏(°F)前提のため変換
+  const h = Math.min(Math.max(rhPercent, 0), 100) / 100;
+  const W = 330 + 0.452 * T + 0.00415 * T * T;
+  const K = 0.791 + 0.000463 * T - 0.000000844 * T * T;
+  const K1 = 6.34 + 0.000775 * T - 0.0000935 * T * T;
+  const K2 = 1.09 + 0.0284 * T - 0.0000904 * T * T;
+  const Kh = K * h;
+  const term1 = Kh / (1 - Kh);
+  const term2 = (K1 * Kh + 2 * K1 * K2 * Kh * Kh) / (1 + K1 * Kh + K1 * K2 * Kh * Kh);
+  return (1800 / W) * (term1 + term2);
+}
+
+// 「十分乾燥した薪」の目安(DRY_MOISTURE_THRESHOLD_PERCENT=20%)まで薪が乾き続けるには、
+// 空気の平衡含水率がそれより十分低い必要がある。木材乾燥でよく使われる「よく乾く日」の
+// 目安(EMC 15%以下)を採用。降水量は、夕立程度の一時的な雨なら乾燥の妨げにならないと
+// 考え、しきい値を緩めている(以前は0.2mmとほぼ無降水限定だった)。
+const DRY_FRIENDLY_EMC_THRESHOLD = 15;
+const DRY_FRIENDLY_PRECIP_MM = 2;
 export function dryFriendlyDaysCount(dailyWeather) {
   if (!dailyWeather || !dailyWeather.length) return null;
-  return dailyWeather.filter((d) => d.precipitationSum <= 0.2 && d.humidityMean <= 65).length;
+  return dailyWeather.filter(
+    (d) =>
+      d.precipitationSum <= DRY_FRIENDLY_PRECIP_MM &&
+      equilibriumMoistureContent(d.tempMax, d.humidityMean) <= DRY_FRIENDLY_EMC_THRESHOLD
+  ).length;
 }
 
 export function stoveYears(purchaseDateIso) {

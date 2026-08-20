@@ -39,7 +39,7 @@ import {
 } from '../derive.js';
 import { upcoming48hRisk, factualTodayNote, upcomingDaysSummary } from '../weather.js';
 import { showToast, go } from '../ui.js';
-import { openSenseNoteSheet, openShelfPickerSheet, openPhotoViewSheet } from './sheets.js';
+import { openSenseNoteSheet, openShelfPickerSheet, openPhotoViewSheet, openSplitLogSheet } from './sheets.js';
 import { state } from '../state.js';
 import { localIsoDate } from '../date-utils.js';
 import { noPhotoPlaceholderHtml, pickImageFile, fileToResizedDataUrl } from '../photos.js';
@@ -285,7 +285,7 @@ export function render() {
       </div>
     `);
   }
-  if (isBelowSafetyLine(shelves, profile.safetyLineM3)) {
+  if (shelves.length > 0 && isBelowSafetyLine(shelves, profile.safetyLineM3)) {
     banners.push(
       `<div class="banner" style="background:rgba(181,80,46,.14);border-color:rgba(181,80,46,.4)"><svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--red)"><use href="#i-info"/></svg><span>使える薪の合計が安心ライン(${profile.safetyLineM3}m³)を下回っています。</span></div>`
     );
@@ -514,4 +514,8 @@ export function openMainShelfCheck() {
   if (!shelf) return;
   state.currentShelfId = shelf.id;
   go('check');
+}
+
+export function openSplitLogFromHome() {
+  openSplitLogSheet(() => render());
 }

@@ -15,6 +15,7 @@ const KEYS = {
   seasons: 'himori.seasons',
   woodTypeCatalog: 'himori.woodTypeCatalog',
   weatherHistory: 'himori.weatherHistory',
+  notificationHistory: 'himori.notificationHistory',
 };
 
 function readJSON(key, fallback) {
@@ -303,6 +304,17 @@ export function addSplitLog(entry) {
   list.unshift(record);
   writeJSON(KEYS.splitLogs, list);
   return record;
+}
+
+// ---- 通知履歴(消してしまった通知を後から見返せるように、内容そのものを保存する) ----
+const NOTIFICATION_HISTORY_LIMIT = 30;
+export function getNotificationHistory() {
+  return readJSON(KEYS.notificationHistory, []);
+}
+export function addNotificationHistory(title, body) {
+  const list = getNotificationHistory();
+  list.unshift({ id: uid('notif'), date: isoDate(new Date()), title, body });
+  writeJSON(KEYS.notificationHistory, list.slice(0, NOTIFICATION_HISTORY_LIMIT));
 }
 
 // ---- Anshin history(安心度スナップショットのキャッシュ) ----

@@ -4,7 +4,7 @@
 // おきながら、実際にはピンポイントな天気は分からない」というちぐはぐな印象を与えてしまう
 // との指摘を受け、都道府県→市区町村を選ぶだけの方式に変更した。実際に得られる予報の
 // 精度が「市区町村程度」でしかないなら、入力してもらう情報もその粒度に合わせる方が誠実。
-import { getWeatherCache, setWeatherCache, recordWeatherHistoryToday, updateProfile } from './store.js';
+import { getWeatherCache, setWeatherCache, recordWeatherHistoryToday, updateProfile, addNotificationHistory } from './store.js';
 import { localIsoDate } from './date-utils.js';
 import { resolveJmaArea, fetchJmaDaily } from './jma.js';
 
@@ -204,6 +204,7 @@ function canShowNotification() {
 
 function showLocalNotification(title, body) {
   if (!canShowNotification()) return;
+  addNotificationHistory(title, body);
   try {
     if (navigator.serviceWorker?.controller) {
       navigator.serviceWorker.ready.then((reg) => reg.showNotification(title, { body }));

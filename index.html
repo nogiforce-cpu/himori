@@ -41,6 +41,7 @@
       <div class="btn-row" style="margin-top:8px">
         <button class="btn-ghost" id="btn-go-check"><svg class="icon" viewBox="0 0 24 24" style="width:15px;height:15px"><use href="#i-check"/></svg>薪棚チェック</button>
         <button class="btn-ghost" id="btn-open-add"><svg class="icon" viewBox="0 0 24 24" style="width:15px;height:15px"><use href="#i-plus"/></svg>薪を追加</button>
+        <button class="btn-ghost" id="btn-home-split-log"><img src="assets/icon-axe.png" alt="" style="width:15px;height:15px;object-fit:contain">薪割り</button>
       </div>
 
       <div class="card" id="home-note"></div>
@@ -63,7 +64,6 @@
     <div class="topbar">
       <span class="title">薪棚一覧</span>
       <div style="display:flex;gap:8px">
-        <button class="iconbtn" id="btn-woodtypes" aria-label="樹種コレクション"><img src="assets/icon-woodtype.png" alt="" style="width:18px;height:18px;object-fit:contain"></button>
         <button class="iconbtn" id="btn-shelves-add" aria-label="新しい薪棚を登録" style="background:var(--olive);color:var(--green)"><svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px"><use href="#i-plus"/></svg></button>
       </div>
     </div>
@@ -162,7 +162,7 @@
   <section class="screen" data-tab="album">
     <div class="topbar">
       <span class="title">写真で振り返る</span>
-      <button class="iconbtn" id="btn-album-info" aria-label="写真の登録方法について"><svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px"><use href="#i-info"/></svg></button>
+      <button class="iconbtn" id="btn-album-info" aria-label="写真の登録方法について"><svg class="icon" viewBox="0 0 24 24"><use href="#i-info"/></svg></button>
     </div>
     <div class="content">
       <div class="filter-tabs" id="album-filters">
@@ -192,12 +192,9 @@
         <div class="settings-title">ストーブ管理</div>
         <div class="card" id="settings-stove" style="margin-bottom:0"></div>
       </div>
-      <div class="settings-section" id="settings-backup-notice-wrap">
-        <div class="card" id="settings-backup-notice" style="margin-bottom:0"></div>
-      </div>
       <div class="settings-section">
         <div class="settings-title">バックアップ・復元</div>
-        <p class="label-sm" style="margin:0 2px 8px">データはこの端末にしか保存されません。機種変更やブラウザのデータ削除の前に、バックアップを作成しておくと安心です。</p>
+        <p class="label-sm" id="settings-backup-desc" style="margin:0 2px 8px">データはこの端末にしか保存されません。機種変更やブラウザのデータ削除の前に、バックアップを作成しておくと安心です。</p>
         <div class="card" id="settings-backup" style="margin-bottom:0"></div>
       </div>
       <div class="settings-section">

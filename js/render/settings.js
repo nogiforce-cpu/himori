@@ -89,14 +89,16 @@ export function render() {
        <div class="settings-row" data-action="reset-demo-data"><span>デモデータをリセット</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>`
     : `<div class="settings-row" data-action="load-demo-data"><span>デモデータを試す(1シーズン分)</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>`;
 
-  const backupNoticeEl = document.getElementById('settings-backup-notice');
-  const backupNoticeWrap = document.getElementById('settings-backup-notice-wrap');
-  if (backupNoticeEl && backupNoticeWrap) {
+  const backupDescEl = document.getElementById('settings-backup-desc');
+  if (backupDescEl) {
     const notice = backupReminderText();
-    backupNoticeWrap.style.display = notice ? '' : 'none';
-    backupNoticeEl.innerHTML = notice
-      ? `<div class="settings-row" data-action="export-data" style="color:var(--ember)"><span>${notice}</span><span class="v">今すぐ作成する <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>`
-      : '';
+    if (notice) {
+      backupDescEl.textContent = `${notice}。今のうちに作成しておくと安心です。`;
+      backupDescEl.style.color = 'var(--ember)';
+    } else {
+      backupDescEl.textContent = 'データはこの端末にしか保存されません。機種変更やブラウザのデータ削除の前に、バックアップを作成しておくと安心です。';
+      backupDescEl.style.color = '';
+    }
   }
 
   updateAppBadge();
@@ -291,18 +293,52 @@ export function importData() {
   });
 }
 
+// アイコン+太字タイトル+説明、というホーム画面の「樹種コレクションを見る」カードと
+// 同じ見た目のリスト行を作るヘルパー。見出しも無く7つの段落が並ぶだけだった旧デザインが
+// 「ガイドというより豆知識の羅列」と感じられたため、意味のあるまとまりごとに区切り、
+// アイコンで視覚的にも辿りやすくした。
+function guideRow(icon, title, body, isImg) {
+  const iconHtml = isImg
+    ? `<img src="${icon}" alt="" style="width:20px;height:20px;object-fit:contain">`
+    : `<svg class="icon" viewBox="0 0 24 24" style="width:20px;height:20px;color:var(--ember)"><use href="${icon}"/></svg>`;
+  return `
+    <div style="display:flex;gap:12px;padding:12px 2px;border-bottom:1px solid #262922">
+      <div style="width:36px;height:36px;border-radius:8px;background:rgba(154,196,106,.14);display:flex;align-items:center;justify-content:center;flex-shrink:0">${iconHtml}</div>
+      <div style="flex:1">
+        <div style="font-weight:700">${title}</div>
+        <div style="font-size:calc(12px * var(--font-scale));margin-top:2px;color:var(--khaki);line-height:1.6">${body}</div>
+      </div>
+    </div>
+  `;
+}
+function guideSection(title, rowsHtml) {
+  return `
+    <div class="label-sm" style="margin:16px 0 6px 2px">${title}</div>
+    <div class="card" style="padding:2px 12px;margin-bottom:0">${rowsHtml}</div>
+  `;
+}
 export function openGuide() {
   openInfoSheet(
     '使い方ガイド',
     `
-    <p>毎日は「今日、焚いた」をワンタップするだけでOKです。</p>
-    <p>週末など気が向いたときに「薪棚チェック」(乾燥状態・虫カビ・雨漏り湿気・通気風通し・薪の崩れ)で状態を記録しておくと、乾燥具合の目安やレギュラー薪棚選びの参考になります。</p>
-    <p>薪を補充したら「薪を追加」で記録してください。入手先メモを残しておくと、次のシーズンにどこで買ったか思い出せて便利です。</p>
-    <p>「レギュラー薪棚」は今シーズンいちばん使う棚のことです。ホーム上部のカードから直接チェック画面に進めます。未設定のときはアプリが自動でおすすめを出しますが、あくまで参考です。</p>
-    <p>薪割りをしたら「薪割り記録」(斧アイコン)で記録できます。量がまだ分からないときは「量はまだ分からない」を選べば、あとから正確な数字が無くても記録だけ残せます。</p>
-    <p>カレンダータブでは、日ごとの記録がアイコンで一覧できます。同じ日付をタップすると、去年の同じ日に何をしていたかも確認できます。</p>
-    <p>ストーブのカード(ホーム下部)をタップすると、煙突掃除やガスケット交換などのメンテナンス記録画面に進めます。</p>
-    <p>データはこの端末にしか保存されないので、設定画面の「バックアップを作成」で定期的にバックアップを作っておくと安心です。</p>
+    <p style="margin-top:0">日々の記録は、この4つの機能だけ覚えておけば十分です。</p>
+    ${guideSection(
+      '毎日〜週末に使う',
+      guideRow('#i-flame', '今日、焚いた', '毎日はワンタップするだけでOKです。') +
+        guideRow('#i-check', '薪棚チェック', '乾燥状態・虫カビ・雨漏り湿気・通気風通し・薪の崩れを記録します。週末など気が向いたときで十分です。') +
+        guideRow('#i-plus', '薪を追加', '薪を補充したら記録してください。入手先メモを残しておくと、次のシーズンに思い出せて便利です。') +
+        guideRow('assets/icon-axe.png', '薪割り記録', '薪割りをしたら記録できます。量がまだ分からないときは「量はまだ分からない」を選べば、記録だけ残せます。', true)
+    )}
+    ${guideSection(
+      'まとめて見返す',
+      guideRow('#i-warehouse', 'レギュラー薪棚', '今シーズンいちばん使う棚のことです。ホーム上部のカードから直接チェック画面に進めます。未設定でもアプリが自動でおすすめを出します。') +
+        guideRow('#i-calendar', 'カレンダー', '日ごとの記録がアイコンで一覧できます。同じ日付をタップすると、去年の同じ日に何をしていたかも確認できます。')
+    )}
+    ${guideSection(
+      'ストーブとデータを守る',
+      guideRow('#i-wrench', 'メンテナンス記録', 'ホーム下部のストーブカードにある「メンテ記録」から、煙突掃除やガスケット交換などを記録できます(設定画面からも同じ記録に進めます)。写真部分をタップすると、写真の確認・変更ができます。') +
+        guideRow('#i-download', 'バックアップ', 'データはこの端末にしか保存されません。設定画面の「バックアップを作成」で定期的に書き出しておくと安心です。')
+    )}
     `
   );
 }
@@ -312,8 +348,8 @@ export function openFaq() {
     `
     <p><b>Q. 天気通知が届きません</b><br>設定で通知を許可し、お住まいの地域を登録してください。アプリを開いた時にのみ判定するため、常時のプッシュ通知ではありません。</p>
     <p><b>Q. データはどこに保存されますか</b><br>この端末のブラウザ内(localStorage)にのみ保存されます。機種変更時やブラウザのデータ削除の前には「バックアップを作成」で必ずバックアップしてください。</p>
-    <p><b>Q. 含水計を持っていません。含水率は必須ですか</b><br>いいえ、任意です。実測値が無い場合は、薪棚チェックの「乾燥状態」項目(良好/要確認)を代わりに表示します。</p>
-    <p><b>Q. 薪の残量はどうやって記録しますか</b><br>「満タン写真」を基準にした見た目の割合と、数値での手入力(%)のどちらか、もしくは両方を使って記録できます。写真からの自動判定ではないので、ご自身の感覚で調整してください。</p>
+    <p><b>Q. 含水計を持っていません。含水率は必須ですか</b><br>いいえ、任意です。実測値が無い場合は、薪棚チェックの「乾燥状態」項目(良好/要注意/異常あり)を代わりに表示します。</p>
+    <p><b>Q. 薪の残量はどうやって記録しますか</b><br>「満タン写真」を基準にした見た目の割合を、スライダーで直感的に合わせて記録できます。写真からの自動判定ではないので、ご自身の感覚で調整してください。</p>
     <p><b>Q. シーズンオフの間はどうなりますか</b><br>約1ヶ月焚いていない状態が続くと、シーズン終了を確認するお知らせが出ます。次に焚いた日から自動的に新しいシーズンが始まります。</p>
     <p><b>Q. 記録を間違えて登録してしまいました</b><br>「今日、焚いた」の直後はトーストの「元に戻す」で取り消せます。それ以外の記録は、対象の薪棚・カレンダーの日付から編集・削除してください。</p>
     <p><b>Q. 他の端末と記録を共有できますか</b><br>現在は端末ごとの保存のみです。「バックアップを作成」で書き出したファイルを、別端末の「バックアップから復元」で読み込むことで移行できます。</p>

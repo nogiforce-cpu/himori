@@ -6,7 +6,7 @@ import * as album from './render/album.js';
 import * as settings from './render/settings.js';
 import * as calendar from './render/calendar.js';
 import { openAddWoodModal, openAddShelfSheet, openWoodTypeCollectionSheet, openInfoSheet } from './render/sheets.js';
-import { seedIfEmpty, getProfile, getShelves } from './store.js';
+import { seedIfEmpty, getProfile, getShelves, getNotificationHistory } from './store.js';
 import { ensureWeatherFresh, maybeNotifyWeather, maybeNotifyChimney, maybeNotifyShelfCheck } from './weather.js';
 import { maybeStartOnboarding } from './onboarding.js';
 import { go, openMenu, closeMenu, onNavigate } from './ui.js';
@@ -74,9 +74,26 @@ function on(id, event, handler) {
 function wireStatic() {
   on('btn-open-menu', 'click', openMenu);
   on('btn-alerts', 'click', () => {
+    const history = getNotificationHistory();
+    const historyHtml = history.length
+      ? `
+        <div class="label-sm" style="margin:14px 0 6px">過去のお知らせ</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${history
+            .map(
+              (n) => `
+            <div class="card" style="padding:10px 12px">
+              <div class="label-sm">${n.date}</div>
+              <div style="font-weight:700;margin-top:2px">${n.title}</div>
+              <div style="font-size:calc(12px * var(--font-scale));margin-top:2px">${n.body}</div>
+            </div>`
+            )
+            .join('')}
+        </div>`
+      : '<div class="label-sm" style="margin-top:14px">まだお知らせは届いていません。</div>';
     openInfoSheet(
       'お知らせについて',
-      '<p>通知は「48時間以内の冷え込み・雨・雪」「煙突・触媒清掃の予定日」「薪棚を14日以上チェックしていない」の3種類のみです。設定で通知を許可すると、アプリを開いたタイミングで判定・表示されます(常時のプッシュ通知ではありません)。</p>'
+      `<p>通知は「48時間以内の冷え込み・雨・雪」「煙突・触媒清掃の予定日」「薪棚を14日以上チェックしていない」の3種類のみです。設定で通知を許可すると、アプリを開いたタイミングで判定・表示されます(常時のプッシュ通知ではありません)。</p>${historyHtml}`
     );
   });
   on('btn-burn-today', 'click', () => home.handleBurnToday());
@@ -87,7 +104,7 @@ function wireStatic() {
   });
   on('btn-open-add', 'click', () => openAddWoodModal(renderAll));
   on('btn-shelves-add', 'click', () => openAddShelfSheet(renderAll));
-  on('btn-woodtypes', 'click', () => openWoodTypeCollectionSheet());
+  on('btn-home-split-log', 'click', () => home.openSplitLogFromHome());
   on('btn-check-back', 'click', () => go('shelves'));
   on('btn-check-save', 'click', () => check.saveCheck());
   on('btn-week-prev', 'click', () => review.weekPrev());

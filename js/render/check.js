@@ -61,7 +61,7 @@ export function render() {
     const note = factualTodayNote(weather.daily);
     if (note) noteParts.push(note);
     const dryDays = dryFriendlyDaysCount(weather.daily);
-    if (dryDays != null) noteParts.push(`今後1週間は乾燥が進みやすい日(降水なし・湿度65%以下)が${dryDays}日ある見込みです`);
+    if (dryDays != null) noteParts.push(`今後1週間は乾燥が進みやすい日(気温を踏まえた目安)が${dryDays}日ある見込みです`);
   }
   document.getElementById('check-weather-note').textContent = noteParts.join(' / ');
 

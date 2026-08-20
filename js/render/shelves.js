@@ -58,7 +58,7 @@ export function render() {
       const isMain = profile.mainShelfId === s.id;
       const latestCheck = getChecksForShelf(s.id)[0] || null;
       const advisory = shouldShowDryAdvisory(s, latestCheck)
-        ? `<div class="dry-advisory" style="margin-top:5px">そろそろ乾燥薪かもしれません</div>`
+        ? `<div class="dry-advisory" style="margin-top:5px">そろそろ乾燥が進んでいるかもしれません</div>`
         : '';
       const moistureText = moistureDisplayText(latestCheck);
       return `

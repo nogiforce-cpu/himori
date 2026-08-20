@@ -157,11 +157,12 @@ export async function fetchJmaDaily({ officeCode, class10Code, class15Code }) {
   });
 
   // 短期予報(shortTerm.timeSeries[2])には、週間予報と同じ代表観測地点の当日気温が
-  // 含まれている。これまで当日の最高気温だけは数値予報モデル(Open-Meteo)の推定値の
-  // ままで、実測より低く出る癖のせいで実態とズレることがあった(実機で確認済み)。
-  // 同じ観測地点を使うことで、出典の一貫性も保てる。ただし午前に発表された回では
-  // 「当日の最低気温」の枠が省略されて最高気温の値が重複して入る仕様があるため、
-  // 最低気温側は誤読のリスクを避けて触らず、最高気温だけ確実な方(その日の最大値)を採用する。
+  // 含まれている。これまで当日の気温は数値予報モデル(Open-Meteo)の推定値のままで、
+  // 実測より低く出る癖のせいで実態とズレることがあった(実機で確認済み)。同じ観測
+  // 地点を使うことで、出典の一貫性も保てる。なお午前に発表された回では「当日の
+  // 最低気温」の枠が省略されて最高気温の値が重複して入る仕様があり、その場合は
+  // 当日の最低気温が最高気温と同じ値になってしまうことがあるが、出典を気象庁のみに
+  // 揃えることを優先し、この限界は許容する。
   const tempStationSeries = shortTerm?.timeSeries?.[2];
   const weeklyStationCode = weeklyTempArea?.area?.code;
   const tempStationArea =
@@ -176,6 +177,7 @@ export async function fetchJmaDaily({ officeCode, class10Code, class15Code }) {
     if (todayTemps.length) {
       const entry = byDate.get(todayIso) || {};
       entry.tempMax = Math.max(...todayTemps);
+      entry.tempMin = Math.min(...todayTemps);
       byDate.set(todayIso, entry);
     }
   }
