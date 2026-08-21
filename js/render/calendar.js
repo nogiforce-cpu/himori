@@ -88,12 +88,12 @@ export function render() {
     if (photoDates.has(dateIso)) {
       icons.push('<svg class="icon ic-photo" viewBox="0 0 24 24"><use href="#i-image"/></svg>');
     }
-    // シーズン開始は🔥(ブランドの炎モチーフ)、終了は天気アイコンと紛らわしい絵文字を避けて
+    // シーズン開始は炎アイコン(ブランドの炎モチーフ)、終了は天気アイコンと紛らわしい絵文字を避けて
     // 「終」の文字バッジで表す
     // 予定(まだ起きていない未来のこと)は実績と混同しないよう、点線の縁取りバッジで
     // 「これから」感を出す(実績のアイコンは塗りつぶし、予定は輪郭のみ)
     const seasonMark = seasonStartDates.has(dateIso)
-      ? '<span class="cal-season-mark">🔥</span>'
+      ? '<span class="cal-season-mark"><svg class="icon" viewBox="0 0 24 24" style="width:10px;height:10px;color:var(--ember)"><use href="#i-flame"/></svg></span>'
       : seasonEndDates.has(dateIso)
         ? '<span class="cal-season-mark cal-season-end">終</span>'
         : dateIso === nextChimney
@@ -121,13 +121,15 @@ export function render() {
   const usedVolume = Math.round(monthBurns.length * BURN_CONSUMPTION_M3 * 100) / 100;
   const summaryEl = document.getElementById('cal-month-summary');
   if (summaryEl) {
+    const summaryIcon = (symbol, extra = '') =>
+      `<svg class="icon" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-2px;margin-right:3px${extra}"><use href="${symbol}"/></svg>`;
     summaryEl.innerHTML = `
       <div class="label-sm" style="margin-bottom:6px">今月のまとめ</div>
       <div style="font-size:calc(12px * var(--font-scale));line-height:1.9">
-        🔥焚いた回数 ${monthBurns.length}回(約${usedVolume}m³)<br>
-        ${monthChecks.length > 0 ? `📋薪棚チェック ${monthChecks.length}回<br>` : ''}
-        ${monthMaint.length > 0 ? `🔧メンテナンス ${monthMaint.length}回<br>` : ''}
-        ${monthSplits.length > 0 ? `🪓薪割り ${monthSplits.length}回` : ''}
+        ${summaryIcon('#i-flame', ';color:var(--ember)')}焚いた回数 ${monthBurns.length}回(約${usedVolume}m³)<br>
+        ${monthChecks.length > 0 ? `${summaryIcon('#i-check')}薪棚チェック ${monthChecks.length}回<br>` : ''}
+        ${monthMaint.length > 0 ? `${summaryIcon('#i-wrench')}メンテナンス ${monthMaint.length}回<br>` : ''}
+        ${monthSplits.length > 0 ? `<img src="assets/icon-axe.png" alt="" style="width:13px;height:13px;vertical-align:-2px;margin-right:3px;object-fit:contain">薪割り ${monthSplits.length}回` : ''}
       </div>
     `;
   }
@@ -135,7 +137,7 @@ export function render() {
   const currentSeason = seasons.find((s) => !s.endDate);
   const seasonNoteEl = document.getElementById('cal-season-note');
   if (currentSeason) {
-    seasonNoteEl.textContent = `🔥今シーズン開始: ${currentSeason.startDate}${lastBurn ? `・最後に焚いた日: ${lastBurn}(「終」マークは終了日)` : ''}`;
+    seasonNoteEl.textContent = `今シーズン開始: ${currentSeason.startDate}${lastBurn ? `・最後に焚いた日: ${lastBurn}(「終」マークは終了日)` : ''}`;
   } else if (seasons.length) {
     const last = seasons[seasons.length - 1];
     seasonNoteEl.textContent = `前シーズン: ${last.startDate} 〜 ${last.endDate}`;
@@ -174,12 +176,12 @@ function lastYearHighlights(dateIso) {
   const lastYearIso = lastYearSameDay(dateIso);
   const highlights = [];
   getSeasons().forEach((s) => {
-    if (s.startDate === lastYearIso) highlights.push('🔥昨年の焚き始めの日でした');
+    if (s.startDate === lastYearIso) highlights.push('<svg class="icon" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-2px;margin-right:3px;color:var(--ember)"><use href="#i-flame"/></svg>昨年の焚き始めの日でした');
     if (s.endDate === lastYearIso) highlights.push('昨年のシーズン締めの日でした');
   });
   getMaintenanceLogs()
     .filter((m) => m.date === lastYearIso)
-    .forEach((m) => highlights.push(`🔧昨年、${m.type}をしました`));
+    .forEach((m) => highlights.push(`<svg class="icon" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-2px;margin-right:3px"><use href="#i-wrench"/></svg>昨年、${m.type}をしました`));
   return highlights;
 }
 

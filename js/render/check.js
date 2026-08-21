@@ -1,4 +1,4 @@
-import { getShelf, getChecksForShelf, addCheck, updateCheck, updateShelf, addPhoto, getWeatherCache, getPhotos, getProfile } from '../store.js';
+import { getShelf, getChecksForShelf, addCheck, updateCheck, updateShelf, addPhoto, getWeatherCache, getPhotos, getProfile, getWoodAdditions } from '../store.js';
 import { daysBetween, dryFriendlyDaysCount, todayIso, DRY_MOISTURE_THRESHOLD_PERCENT, CHECKLIST_ITEMS, CHECK_STATE_LABELS, nextCheckState } from '../derive.js';
 import { factualTodayNote } from '../weather.js';
 import { showToast, go, openOverlay, closeOverlay } from '../ui.js';
@@ -40,16 +40,19 @@ export function render() {
   const thumbHtml = photo
     ? `<div class="photo-ph" style="width:56px;height:56px;flex-shrink:0"><img src="${photo.uri}" alt=""></div>`
     : noPhotoPlaceholderHtml('', 'width:56px;height:56px;flex-shrink:0');
+  const statusBadgeColor = shelf.status === '乾燥済み' ? 'green' : shelf.status === '来季用' ? 'khaki' : 'amber';
   headerEl.innerHTML = `
     <div style="display:flex;gap:12px;align-items:center;flex:1;cursor:pointer" data-action="pick-shelf">
       ${thumbHtml}
       <div style="flex:1;min-width:0">
-        <div style="font-size:calc(14px * var(--font-scale));font-weight:700;display:flex;align-items:center;gap:4px">
+        <div style="font-size:calc(14px * var(--font-scale));font-weight:700;display:flex;align-items:center;gap:4px;flex-wrap:wrap">
           ${shelf.name}${isMain ? '<span class="main-tag">レギュラー</span>' : ''}
+          <span class="badge ${statusBadgeColor}">${shelf.status}</span>
           <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px;color:var(--khaki);transform:rotate(90deg);flex-shrink:0"><use href="#i-chevright"/></svg>
         </div>
         <div class="label-sm">残量${shelf.remainingPercent}%(約${shelf.usableVolumeM3}m³)・最終チェック${lastDays}日前${dryingDays != null ? `・乾燥経過${dryingDays}日` : ''}</div>
         ${shelf.woodTypes?.length ? `<div class="label-sm">樹種:${shelf.woodTypes.join('・')}</div>` : ''}
+        <button class="link-btn" style="padding:2px 0 0;font-weight:400" data-action="edit-shelf">状態(${shelf.status})を変更する</button>
       </div>
     </div>
     <button class="iconbtn" data-action="edit-shelf"><svg class="icon" viewBox="0 0 24 24" style="width:17px;height:17px"><use href="#i-edit"/></svg></button>
@@ -103,9 +106,13 @@ export function render() {
     const file = await pickImageFile();
     if (!file) return;
     const dataUrl = await fileToResizedDataUrl(file);
-    const photo = addPhoto({ category: '薪棚', date: todayIso(), uri: dataUrl });
-    updateShelf(shelf.id, { referencePhotoId: photo.id });
-    render();
+    try {
+      const photo = addPhoto({ category: '薪棚', date: todayIso(), uri: dataUrl });
+      updateShelf(shelf.id, { referencePhotoId: photo.id });
+      render();
+    } catch {
+      showToast('保存に失敗しました。写真の保存容量が上限に近づいている可能性があります');
+    }
   };
   document.getElementById('check-set-ref-photo').addEventListener('click', setRefPhoto);
   document.getElementById('check-ref-photo').addEventListener('click', () => {
@@ -130,16 +137,30 @@ export function render() {
     <div class="label-sm" style="margin-top:4px">目安:${DRY_MOISTURE_THRESHOLD_PERCENT}%以下で十分乾燥した薪とされています</div>
   `;
 
+  // 薪の追加も、薪棚の状態が変わった出来事という意味ではチェック記録と同じ時系列の
+  // 一部なので、チェック履歴に混ぜて表示する(以前は薪を追加しても、ここには
+  // 一切反映されず、カレンダーの日別詳細でしか見られなかった)。
+  const additions = getWoodAdditions().filter((a) => a.shelfId === shelf.id);
+  const timeline = [
+    ...history.map((h) => ({ type: 'check', date: h.date, data: h })),
+    ...additions.map((a) => ({ type: 'addition', date: a.date, data: a })),
+  ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+
   const historyEl = document.getElementById('check-history');
-  historyEl.innerHTML = history.length
-    ? history
-        .map(
-          (h) =>
-            `<div class="history-row" style="cursor:pointer" data-check-id="${h.id}"><span>${h.date}(${daysBetween(h.date)}日前)</span><span>残量${h.remainingPercent}%(約${h.usableVolumeM3}m³)${h.moisturePercent != null ? `・含水率${h.moisturePercent}%(${moistureNote(h.moisturePercent)})` : ''} <svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;color:var(--muted)"><use href="#i-chevright"/></svg></span></div>`
-        )
+  historyEl.innerHTML = timeline.length
+    ? timeline
+        .map((entry) => {
+          if (entry.type === 'check') {
+            const h = entry.data;
+            return `<div class="history-row" style="cursor:pointer" data-check-id="${h.id}"><span>${h.date}(${daysBetween(h.date)}日前)</span><span>残量${h.remainingPercent}%(約${h.usableVolumeM3}m³)${h.moisturePercent != null ? `・含水率${h.moisturePercent}%(${moistureNote(h.moisturePercent)})` : ''} <svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;color:var(--muted)"><use href="#i-chevright"/></svg></span></div>`;
+          }
+          const a = entry.data;
+          const detail = [a.source, a.price != null ? `¥${a.price.toLocaleString()}` : null].filter(Boolean).join('・');
+          return `<div class="history-row"><span>${a.date}(${daysBetween(a.date)}日前)・薪を追加</span><span>+${a.addedVolumeM3}m³${detail ? `(${detail})` : ''}</span></div>`;
+        })
         .join('')
     : `<div class="empty">まだチェック記録がありません。</div>`;
-  historyEl.querySelectorAll('.history-row').forEach((row) => {
+  historyEl.querySelectorAll('.history-row[data-check-id]').forEach((row) => {
     row.addEventListener('click', () => {
       openCheckEditSheet(row.dataset.checkId, () => render());
     });

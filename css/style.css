@@ -42,7 +42,7 @@
   --gunmetal:#D9DACE;
 }
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",Meiryo,sans-serif;color:var(--cream);overflow-x:hidden}
+html,body{margin:0;height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",Meiryo,sans-serif;color:var(--cream);overflow-x:hidden;touch-action:manipulation}
 body{display:flex;justify-content:center}
 svg.icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 
@@ -80,6 +80,11 @@ svg.icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;s
 .btn-primary.flash{animation:btnFlash .45s ease}
 .btn-ghost{flex:1;background:transparent;border:1px solid #4a4d40;color:var(--khaki);border-radius:9px;padding:10px;font-size:calc(12px * var(--font-scale));font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;min-height:44px}
 .btn-row{display:flex;gap:8px;margin-bottom:12px}
+/* 3つ横並びだと日本語ラベルが幅不足で単語の途中から改行されてしまう(文字サイズ「特大」だと
+   さらに悪化する)ため、アイコンを上・ラベルを下に積む形にして、幅に依存せず1行に収める */
+.btn-stack{flex:1;background:transparent;border:1px solid #4a4d40;color:var(--khaki);border-radius:9px;padding:9px 4px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;cursor:pointer;min-height:56px}
+.btn-stack:active{background:rgba(255,255,255,.06)}
+.btn-stack span{font-size:calc(11px * var(--font-scale));font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .link-btn{background:transparent;border:0;color:var(--khaki);font-size:calc(12px * var(--font-scale));font-weight:700;text-decoration:underline;cursor:pointer;padding:8px 0}
 .ring-wrap{position:relative;width:76px;height:76px;flex-shrink:0}
 .ring-wrap svg{width:100%;height:100%;transform:rotate(-90deg)}
@@ -249,7 +254,7 @@ textarea.box{width:100%;border:0;resize:none;font-family:inherit;color:var(--cre
 .cal-day.last-burn{box-shadow:0 0 0 1.5px var(--ember) inset}
 .cal-day.warn{box-shadow:0 0 0 1.5px var(--red) inset;background:rgba(181,80,46,.12)}
 .cal-day-top{display:flex;align-items:center;justify-content:space-between;line-height:1}
-.cal-season-mark{font-size:calc(9px * var(--font-scale))}
+.cal-season-mark{font-size:calc(9px * var(--font-scale));display:inline-flex;align-items:center}
 .cal-season-mark.cal-season-end{font-weight:700;color:var(--khaki);background:rgba(169,151,107,.18);border-radius:3px;padding:0 3px}
 .cal-season-mark.cal-plan-mark{font-weight:700;color:var(--khaki);border:1px dashed var(--khaki);border-radius:3px;padding:0 3px}
 .cal-day .cal-icons{display:flex;gap:3px;margin-top:3px;min-height:15px;justify-content:center;align-items:center}

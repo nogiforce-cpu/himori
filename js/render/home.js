@@ -38,7 +38,7 @@ import {
   BURN_CONSUMPTION_M3,
 } from '../derive.js';
 import { upcoming48hRisk, factualTodayNote, upcomingDaysSummary } from '../weather.js';
-import { showToast, go } from '../ui.js';
+import { showToast, go, openOverlay, closeOverlay } from '../ui.js';
 import { openSenseNoteSheet, openShelfPickerSheet, openPhotoViewSheet, openSplitLogSheet } from './sheets.js';
 import { state } from '../state.js';
 import { localIsoDate } from '../date-utils.js';
@@ -331,9 +331,12 @@ export function render() {
   const seasons = getSeasons();
   const previousSeason = seasons.filter((s) => s.endDate).slice(-1)[0];
   const seasonDateParts = [];
-  if (currentSeason) seasonDateParts.push(`🔥今シーズン開始 ${currentSeason.startDate}`);
+  if (currentSeason)
+    seasonDateParts.push(
+      `<svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;vertical-align:-1px;margin-right:2px;color:var(--ember)"><use href="#i-flame"/></svg>今シーズン開始 ${currentSeason.startDate}`
+    );
   if (previousSeason) seasonDateParts.push(`前シーズン終了 ${previousSeason.endDate}`);
-  document.getElementById('home-season-dates').textContent = seasonDateParts.join('・');
+  document.getElementById('home-season-dates').innerHTML = seasonDateParts.join('・');
 
   const mainLastCheck = mainShelf ? getChecksForShelf(mainShelf.id)[0] : null;
   document.getElementById('home-note').innerHTML = `
@@ -430,12 +433,27 @@ export function handleBurnToday() {
   // 真夏(オフシーズン)にたまたま焚いた場合まで「今年も暖かい冬になりますように」と
   // 言うと季節感が矛盾するため、シーズン開始の演出は焚き頃の時期(peak/shoulder)だけにする
   const celebrateSeasonStart = isSeasonStart && seasonPhase() !== 'off';
-  const toastMessage = celebrateSeasonStart ? '🔥今シーズンの焚き始めです。今年も暖かい冬になりますように。' : '今日の記録を保存しました';
   const actions = [{ label: '元に戻す', onClick: undoBurn }];
   if (!celebrateSeasonStart) {
     actions.push({ label: 'ひとことを追加', onClick: () => openSenseNoteSheet(log.id, () => render()) });
   }
-  showToast(toastMessage, actions);
+  showToast('今日の記録を保存しました', actions);
+  // トーストだけだと見逃しやすく、シーズン最初の一枚は特別な瞬間なので、
+  // 短く自動で消える専用の演出をひとつ重ねる(タップでも早く閉じられる)
+  if (celebrateSeasonStart) showSeasonStartCelebration();
+}
+
+function showSeasonStartCelebration() {
+  const ov = openOverlay(`
+    <div class="sheet" style="text-align:center;padding:36px 24px">
+      <svg class="icon" viewBox="0 0 24 24" style="width:44px;height:44px;color:var(--ember);margin:0 auto 14px;display:block"><use href="#i-flame"/></svg>
+      <div class="slab" style="font-size:calc(18px * var(--font-scale));font-weight:700;margin-bottom:8px">今シーズンの焚き始めです</div>
+      <div class="label-sm" style="line-height:1.7">今年も暖かい冬になりますように。</div>
+    </div>
+  `);
+  setTimeout(() => {
+    if (document.querySelector('[data-dynamic-overlay="true"]') === ov) closeOverlay();
+  }, 2600);
 }
 
 // ホームのストーブ写真は「タップ=写真の操作」という直感に合わせ、カード全体のタップ
@@ -454,9 +472,13 @@ export async function editStovePhoto() {
   const file = await pickImageFile();
   if (!file) return;
   const uri = await fileToResizedDataUrl(file);
-  const photo = addPhoto({ category: 'ストーブ', date: todayIso(), uri });
-  updateProfile({ stove: { ...profile.stove, photoId: photo.id } });
-  render();
+  try {
+    const photo = addPhoto({ category: 'ストーブ', date: todayIso(), uri });
+    updateProfile({ stove: { ...profile.stove, photoId: photo.id } });
+    render();
+  } catch {
+    showToast('保存に失敗しました。写真の保存容量が上限に近づいている可能性があります');
+  }
 }
 
 export function setMainShelf(shelfId) {
@@ -486,12 +508,12 @@ export function confirmSeasonEnd() {
   localStorage.removeItem(SNOOZE_KEY);
   // シーズンを締める時は、ただ「終わった」だけでなく今シーズンの実績を一言添えて
   // ねぎらう(焚き始めのワクワク感と対になる、寂しさを和らげる演出)
-  let message = '🔥今シーズンの記録を締めました。お疲れさまでした。';
+  let message = '今シーズンの記録を締めました。お疲れさまでした。';
   if (currentSeason) {
     const seasonBurns = burnLogs.filter((b) => b.date >= currentSeason.startDate && b.date <= end);
     if (seasonBurns.length > 0) {
       const usedVolume = Math.round(seasonBurns.length * BURN_CONSUMPTION_M3 * 100) / 100;
-      message = `🔥今シーズンもお疲れさまでした。${seasonBurns.length}回焚いて、約${usedVolume}m³使いました。また来シーズンもよろしくお願いします。`;
+      message = `今シーズンもお疲れさまでした。${seasonBurns.length}回焚いて、約${usedVolume}m³使いました。また来シーズンもよろしくお願いします。`;
     }
   }
   showToast(message, [], { duration: 5000 });

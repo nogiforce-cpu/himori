@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#0B0D0A">
-<title>火守 / HIMORI — 薪と暮らしのノート</title>
+<title>火守 / HIMORI — 薪を育て、炎を守るノート。</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <link rel="icon" href="assets/icon-192.png">
@@ -24,7 +24,7 @@
         <svg viewBox="0 0 240 240" style="width:42px;height:42px;flex-shrink:0"><use href="#logo-badge"/></svg>
         <div>
           <div class="brand-name slab">火守</div>
-          <div class="brand-sub">HIMORI ― 薪と暮らしのノート</div>
+          <div class="brand-sub">HIMORI ― 薪を育て、炎を守るノート。</div>
         </div>
       </div>
       <button class="iconbtn" id="btn-alerts" aria-label="お知らせについて"><svg class="icon" viewBox="0 0 24 24"><use href="#i-info"/></svg></button>
@@ -39,16 +39,16 @@
 
       <button class="btn-primary" id="btn-burn-today"><svg class="icon" viewBox="0 0 24 24"><use href="#i-flame"/></svg>今日、焚いた</button>
       <div class="btn-row" style="margin-top:8px">
-        <button class="btn-ghost" id="btn-go-check"><svg class="icon" viewBox="0 0 24 24" style="width:15px;height:15px"><use href="#i-check"/></svg>薪棚チェック</button>
-        <button class="btn-ghost" id="btn-open-add"><svg class="icon" viewBox="0 0 24 24" style="width:15px;height:15px"><use href="#i-plus"/></svg>薪を追加</button>
-        <button class="btn-ghost" id="btn-home-split-log"><img src="assets/icon-axe.png" alt="" style="width:15px;height:15px;object-fit:contain">薪割り</button>
+        <button class="btn-stack" id="btn-go-check"><svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><use href="#i-check"/></svg><span>薪棚チェック</span></button>
+        <button class="btn-stack" id="btn-open-add"><svg class="icon" viewBox="0 0 24 24" style="width:18px;height:18px"><use href="#i-plus"/></svg><span>薪を追加</span></button>
+        <button class="btn-stack" id="btn-home-split-log"><img src="assets/icon-axe.png" alt="" style="width:18px;height:18px;object-fit:contain"><span>薪割り</span></button>
       </div>
 
       <div class="card" id="home-note"></div>
       <div class="leather" id="home-stove" data-action="open-maintenance" style="border-radius:var(--radius);padding:13px;display:flex;align-items:center;gap:12px;margin-bottom:0;cursor:pointer"></div>
       <div class="leather" data-action="open-woodtypes" style="border-radius:var(--radius);padding:12px 13px;display:flex;align-items:center;gap:12px;margin-top:10px;margin-bottom:0;cursor:pointer">
         <div style="width:40px;height:40px;border-radius:8px;background:rgba(154,196,106,.16);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <img src="assets/icon-woodtype.png" alt="" style="width:22px;height:22px;object-fit:contain">
+          <img src="assets/icon-woodtype.png" alt="" style="width:32px;height:32px;object-fit:contain">
         </div>
         <div style="flex:1">
           <div style="font-size:calc(10px * var(--font-scale));color:var(--leather-text);letter-spacing:.5px">図鑑</div>

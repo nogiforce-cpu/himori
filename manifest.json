@@ -1,7 +1,7 @@
 {
-  "name": "火守 / HIMORI ― 薪と暮らしのノート",
+  "name": "火守 / HIMORI ― 薪を育て、炎を守るノート。",
   "short_name": "火守 HIMORI",
-  "description": "薪ストーブユーザーのための薪棚管理・薪と暮らしのノート",
+  "description": "薪ストーブユーザーのための薪棚管理・薪を育て、炎を守るノート",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

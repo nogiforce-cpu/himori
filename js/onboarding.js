@@ -47,11 +47,11 @@ function showInstallPrompt(onDone, offset) {
   const ov = shell({
     step: 1,
     total: 6 + offset,
-    title: '📲 先にホーム画面に追加しませんか?',
+    title: '<svg class="icon" viewBox="0 0 24 24" style="width:20px;height:20px;vertical-align:-4px;margin-right:4px"><use href="#i-home"/></svg>先にホーム画面に追加しませんか?',
     body: '火守は今、Safariのタブで開かれています。このまま使い始めても問題ありませんが、後から「ホーム画面に追加」すると、稀に登録したデータが引き継がれないことがあります(iPhoneの仕様によるものです)。先にホーム画面に追加してから始めると安心です。',
     contentHtml: `
       <div class="card" style="font-size:calc(12px * var(--font-scale));line-height:1.7">
-        共有ボタン(□に↑)をタップ →「ホーム画面に追加」を選択 → ホーム画面に出てきたアイコンから開き直してください。
+        共有ボタン(<svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px;vertical-align:-2px"><use href="#i-upload"/></svg>のアイコン)をタップ →「ホーム画面に追加」を選択 → ホーム画面に出てきたアイコンから開き直してください。
       </div>
     `,
     primaryLabel: 'ホーム画面に追加した(次へ)',
@@ -65,7 +65,7 @@ function showWelcome(onDone, offset = 0) {
   const ov = shell({
     step: 1 + offset,
     total: 6 + offset,
-    title: '🔥 火守 / HIMORIへようこそ',
+    title: '<svg class="icon" viewBox="0 0 24 24" style="width:20px;height:20px;vertical-align:-4px;margin-right:4px;color:var(--ember)"><use href="#i-flame"/></svg>火守 / HIMORIへようこそ',
     body: '薪ストーブの残量管理・乾燥チェック・季節の振り返りができるノートです。使い始める前に、いくつか質問させてください(すべて後からでも変更・スキップできます)。',
     primaryLabel: 'はじめる',
   });

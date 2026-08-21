@@ -160,16 +160,19 @@ export function isBelowSafetyLine(shelves, safetyLineM3) {
   return total < safetyLineM3;
 }
 
-// 薪追加を反映した薪棚の更新パッチを返す(総量を超える場合は総量も引き上げる)
+// 薪追加を反映した薪棚の更新パッチを返す。薪棚の総容量は物理的な棚のサイズで
+// 決まっており、薪を追加したからといって棚自体が大きくなるわけではないため、
+// 以前は総容量も一緒に引き上げていたが、総容量で頭打ちにするよう変更した。
+// 超過分はoverflowM3として返し、呼び出し側でユーザーに知らせる。
 export function applyWoodAddition(shelf, addedVolumeM3) {
-  let usable = shelf.usableVolumeM3 + addedVolumeM3;
-  let total = shelf.totalVolumeM3;
-  if (usable > total) total = Math.round(usable * 100) / 100;
+  const total = shelf.totalVolumeM3;
+  const usableRaw = shelf.usableVolumeM3 + addedVolumeM3;
+  const usable = Math.min(usableRaw, total);
+  const overflowM3 = Math.round((usableRaw - usable) * 100) / 100;
   const remainingPercent = total ? Math.round((usable / total) * 100) : 0;
   return {
-    usableVolumeM3: Math.round(usable * 100) / 100,
-    totalVolumeM3: total,
-    remainingPercent,
+    patch: { usableVolumeM3: Math.round(usable * 100) / 100, remainingPercent },
+    overflowM3,
   };
 }
 

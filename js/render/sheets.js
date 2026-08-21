@@ -249,6 +249,7 @@ export function openAddWoodModal(onSaved) {
   const ov = openOverlay(`
     <div class="modal">
       <div class="row" style="margin-bottom:14px"><span style="font-size:calc(15px * var(--font-scale));font-weight:700">薪を追加した記録</span><button class="iconbtn" data-action="close-overlay"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></div>
+      <div class="leather" id="add-shelf-preview" style="border-radius:var(--radius);padding:10px;display:flex;align-items:center;gap:10px;margin-bottom:14px"></div>
       <div class="field">
         <label>追加した薪棚</label>
         <select class="box" id="add-shelf">
@@ -271,10 +272,15 @@ export function openAddWoodModal(onSaved) {
         <label>薪の種類(任意)</label>
         <input class="box" id="add-woodtype" list="woodtype-options" placeholder="例: 広葉樹(ミックス)">
         <datalist id="woodtype-options">${woodTypeOptions.map((w) => `<option value="${w}">`).join('')}</datalist>
+        <button type="button" class="link-btn" style="padding:4px 0 0" id="add-woodtype-new-toggle">+ 新しい樹種を登録</button>
+        <div id="add-woodtype-new-row" style="display:none;gap:8px;margin-top:6px">
+          <input class="box" id="add-woodtype-new-input" placeholder="例: クヌギ" style="flex:1">
+          <button type="button" class="btn-ghost" style="flex:none;padding:11px 16px" id="add-woodtype-new-save">追加</button>
+        </div>
       </div>
       <div class="field">
         <label>入手先(任意)</label>
-        <input class="box" id="add-source" list="source-options" placeholder="例: 自伐・購入(◯◯材木店)・知人から">
+        <input class="box" id="add-source" list="source-options" placeholder="例: 自分で伐採・購入(◯◯材木店)・知人から">
         <datalist id="source-options">${sourceOptions.map((s) => `<option value="${s}">`).join('')}</datalist>
       </div>
       <div class="field">
@@ -295,6 +301,48 @@ export function openAddWoodModal(onSaved) {
       </div>
     </div>
   `);
+
+  const shelfSelect = ov.querySelector('#add-shelf');
+  const shelfPreview = ov.querySelector('#add-shelf-preview');
+  const updateShelfPreview = () => {
+    const s = shelves.find((x) => x.id === shelfSelect.value);
+    if (!s) return;
+    const photo = s.photoIds.length ? getPhotos().find((p) => p.id === s.photoIds[s.photoIds.length - 1]) : null;
+    const thumbHtml = photo
+      ? `<img src="${photo.uri}" alt="" style="width:52px;height:52px;border-radius:8px;object-fit:cover;flex-shrink:0">`
+      : `<div style="width:52px;height:52px;border-radius:8px;background:rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg class="icon" viewBox="0 0 24 24" style="width:20px;height:20px;color:var(--leather-text)"><use href="#i-camera"/></svg></div>`;
+    shelfPreview.innerHTML = `
+      ${thumbHtml}
+      <div>
+        <div class="slab" style="font-weight:700">${s.name}</div>
+        <div class="label-sm" style="color:var(--leather-text)">残量${s.remainingPercent}%・約${s.usableVolumeM3}m³ / ${s.totalVolumeM3}m³</div>
+      </div>
+    `;
+  };
+  shelfSelect.addEventListener('change', updateShelfPreview);
+  updateShelfPreview();
+
+  // 樹種の登録は、実際には「薪を追加していて、この樹種まだ登録してないな」と
+  // 気づいた時が多いはずなので、その場ですぐ新しい樹種を登録できるようにする
+  const woodtypeInput = ov.querySelector('#add-woodtype');
+  const woodtypeNewRow = ov.querySelector('#add-woodtype-new-row');
+  const woodtypeNewInput = ov.querySelector('#add-woodtype-new-input');
+  ov.querySelector('#add-woodtype-new-toggle').addEventListener('click', () => {
+    woodtypeNewRow.style.display = 'flex';
+    woodtypeNewInput.focus();
+  });
+  ov.querySelector('#add-woodtype-new-save').addEventListener('click', () => {
+    const name = woodtypeNewInput.value.trim();
+    if (!name) return;
+    addWoodTypeToCatalog(name);
+    const datalist = ov.querySelector('#woodtype-options');
+    if (![...datalist.options].some((o) => o.value === name)) {
+      datalist.insertAdjacentHTML('beforeend', `<option value="${name}">`);
+    }
+    woodtypeInput.value = name;
+    woodtypeNewInput.value = '';
+    woodtypeNewRow.style.display = 'none';
+  });
 
   const volLabel = ov.querySelector('#add-vol-label');
   ov.querySelector('#add-vol-minus').addEventListener('click', () => {
@@ -324,21 +372,30 @@ export function openAddWoodModal(onSaved) {
     const memo = ov.querySelector('#add-memo').value.trim();
     const shelf = shelves.find((s) => s.id === shelfId);
 
-    let photoId = null;
-    if (photoDataUrl) {
-      const photo = addPhoto({ category: '薪棚', date, uri: photoDataUrl });
-      photoId = photo.id;
-      updateShelf(shelfId, { photoIds: [...shelf.photoIds, photoId] });
+    try {
+      let photoId = null;
+      if (photoDataUrl) {
+        const photo = addPhoto({ category: '薪棚', date, uri: photoDataUrl });
+        photoId = photo.id;
+        updateShelf(shelfId, { photoIds: [...shelf.photoIds, photoId] });
+      }
+      addWoodAddition({ shelfId, date, addedVolumeM3: addedVolume, woodType, source, price, memo, photoId });
+      const { patch, overflowM3 } = applyWoodAddition(shelf, addedVolume);
+      updateShelf(shelfId, patch);
+      if (woodType && !shelf.woodTypes.includes(woodType)) {
+        updateShelf(shelfId, { woodTypes: [...shelf.woodTypes, woodType] });
+      }
+      if (woodType) addWoodTypeToCatalog(woodType);
+      closeOverlay();
+      showToast(
+        overflowM3 > 0
+          ? `薪棚の容量を超えるため、${overflowM3}m³分は反映されませんでした`
+          : '追加記録を保存しました'
+      );
+      onSaved && onSaved();
+    } catch (e) {
+      showToast('保存に失敗しました。写真の保存容量が上限に近づいている可能性があります');
     }
-    addWoodAddition({ shelfId, date, addedVolumeM3: addedVolume, woodType, source, price, memo, photoId });
-    updateShelf(shelfId, applyWoodAddition(shelf, addedVolume));
-    if (woodType && !shelf.woodTypes.includes(woodType)) {
-      updateShelf(shelfId, { woodTypes: [...shelf.woodTypes, woodType] });
-    }
-    if (woodType) addWoodTypeToCatalog(woodType);
-    closeOverlay();
-    showToast('追加記録を保存しました');
-    onSaved && onSaved();
   });
 }
 
@@ -453,8 +510,12 @@ export function openWoodTypeCollectionSheet() {
         const file = await pickImageFile();
         if (!file) return;
         const uri = await fileToResizedDataUrl(file);
-        addPhoto({ category: '樹種', date: todayIso(), uri, woodType: box.dataset.name });
-        draw();
+        try {
+          addPhoto({ category: '樹種', date: todayIso(), uri, woodType: box.dataset.name });
+          draw();
+        } catch {
+          showToast('保存に失敗しました。写真の保存容量が上限に近づいている可能性があります');
+        }
       });
     });
   }
@@ -858,16 +919,20 @@ export function openShelfEditSheet(shelfId, onSaved) {
     // 総容量を減らして今の使用量がそれを上回ってしまう場合は、使える量も総容量に合わせて丸める
     const usableVolumeM3 = Math.min(shelf.usableVolumeM3, totalVolumeM3);
     const remainingPercent = Math.round((usableVolumeM3 / totalVolumeM3) * 100);
-    let photoIds = shelf.photoIds;
-    if (photo.uri === '') {
-      photoIds = [];
-    } else if (photo.uri) {
-      photoIds = [...shelf.photoIds, addPhoto({ category: '薪棚', date: todayIso(), uri: photo.uri }).id];
+    try {
+      let photoIds = shelf.photoIds;
+      if (photo.uri === '') {
+        photoIds = [];
+      } else if (photo.uri) {
+        photoIds = [...shelf.photoIds, addPhoto({ category: '薪棚', date: todayIso(), uri: photo.uri }).id];
+      }
+      updateShelf(shelfId, { name, status, dryingStartedAt, totalVolumeM3, usableVolumeM3, remainingPercent, photoIds });
+      closeOverlay();
+      showToast('薪棚を更新しました');
+      onSaved && onSaved();
+    } catch {
+      showToast('保存に失敗しました。写真の保存容量が上限に近づいている可能性があります');
     }
-    updateShelf(shelfId, { name, status, dryingStartedAt, totalVolumeM3, usableVolumeM3, remainingPercent, photoIds });
-    closeOverlay();
-    showToast('薪棚を更新しました');
-    onSaved && onSaved();
   });
   ov.querySelector('#shelf-edit-delete').addEventListener('click', () => {
     openConfirmSheet({
@@ -959,8 +1024,6 @@ export function openAddShelfSheet(onSaved) {
     const pct = Math.max(0, Math.min(100, Number(ov.querySelector('#new-shelf-pct').value) || 0));
     const status = ov.querySelector('#new-shelf-status').value;
     const usableVolumeM3 = Math.round(totalVolumeM3 * (pct / 100) * 100) / 100;
-    const photoIds = [];
-    if (photo.uri) photoIds.push(addPhoto({ category: '薪棚', date: todayIso(), uri: photo.uri }).id);
 
     let dryingStartedAt = null;
     if (status !== '来季用') {
@@ -973,18 +1036,24 @@ export function openAddShelfSheet(onSaved) {
       }
     }
 
-    addShelf({
-      name,
-      status,
-      totalVolumeM3,
-      usableVolumeM3,
-      remainingPercent: pct,
-      dryingStartedAt,
-      photoIds,
-    });
-    closeOverlay();
-    showToast('薪棚を登録しました');
-    onSaved && onSaved();
+    try {
+      const photoIds = [];
+      if (photo.uri) photoIds.push(addPhoto({ category: '薪棚', date: todayIso(), uri: photo.uri }).id);
+      addShelf({
+        name,
+        status,
+        totalVolumeM3,
+        usableVolumeM3,
+        remainingPercent: pct,
+        dryingStartedAt,
+        photoIds,
+      });
+      closeOverlay();
+      showToast('薪棚を登録しました');
+      onSaved && onSaved();
+    } catch {
+      showToast('保存に失敗しました。写真の保存容量が上限に近づいている可能性があります');
+    }
   });
 }
 
@@ -1031,16 +1100,20 @@ export function openStoveEditSheet(onSaved) {
     const purchaseDate = ov.querySelector('#stove-edit-purchase').value || null;
     const hasCatalyst = !noCatalystBox.checked;
     const catalystReplacedAt = hasCatalyst ? catalystInput.value || null : null;
-    let photoId = stove.photoId ?? null;
-    if (photo.uri === '') {
-      photoId = null;
-    } else if (photo.uri) {
-      photoId = addPhoto({ category: 'ストーブ', date: todayIso(), uri: photo.uri }).id;
+    try {
+      let photoId = stove.photoId ?? null;
+      if (photo.uri === '') {
+        photoId = null;
+      } else if (photo.uri) {
+        photoId = addPhoto({ category: 'ストーブ', date: todayIso(), uri: photo.uri }).id;
+      }
+      updateProfile({ stove: { ...stove, name, purchaseDate, catalystReplacedAt, hasCatalyst, photoId } });
+      closeOverlay();
+      showToast('薪ストーブ情報を保存しました');
+      onSaved && onSaved();
+    } catch {
+      showToast('保存に失敗しました。写真の保存容量が上限に近づいている可能性があります');
     }
-    updateProfile({ stove: { ...stove, name, purchaseDate, catalystReplacedAt, hasCatalyst, photoId } });
-    closeOverlay();
-    showToast('薪ストーブ情報を保存しました');
-    onSaved && onSaved();
   });
 }
 
@@ -1181,7 +1254,13 @@ export function openMaintenanceSheet(onSaved) {
     const customType = ov.querySelector('#maint-custom-type').value.trim();
     const type = selected === 'その他' && customType ? customType : selected;
     const memo = ov.querySelector('#maint-memo').value.trim();
-    const photoId = photo.uri ? addPhoto({ category: 'メンテ', date, uri: photo.uri }).id : null;
+    let photoId = null;
+    try {
+      photoId = photo.uri ? addPhoto({ category: 'メンテ', date, uri: photo.uri }).id : null;
+    } catch {
+      showToast('保存に失敗しました。写真の保存容量が上限に近づいている可能性があります');
+      return;
+    }
     const payload = { date, type, memo, photoId };
 
     const finish = (message) => {

@@ -28,6 +28,8 @@ function readJSON(key, fallback) {
   }
 }
 
+// 保存容量の上限(特にiOS Safariで厳しい)に達すると例外が発生する。ここで握りつぶさず、
+// 呼び出し元(UI層)がtry/catchでユーザーに分かる形のエラー表示ができるよう、そのまま投げる。
 function writeJSON(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
