@@ -23,21 +23,20 @@ import {
 import {
   resolveMainShelf,
   computeAnshin,
-  estimateDaysLeft,
+  estimateSeasonDaysLeft,
+  roughDateLabel,
   isBelowSafetyLine,
   isOffSeason,
   seasonPhase,
   lastBurnDate,
   shouldShowDryAdvisory,
   shouldPromptSeasonEnd,
-  moistureDisplayText,
   daysBetween,
-  barColor,
   stoveYears,
   todayIso,
   BURN_CONSUMPTION_M3,
 } from '../derive.js';
-import { upcoming48hRisk, factualTodayNote, upcomingDaysSummary } from '../weather.js';
+import { upcoming48hRisk, upcomingDaysSummary } from '../weather.js';
 import { showToast, go, openOverlay, closeOverlay } from '../ui.js';
 import { openSenseNoteSheet, openShelfPickerSheet, openPhotoViewSheet, openSplitLogSheet } from './sheets.js';
 import { state } from '../state.js';
@@ -45,15 +44,6 @@ import { localIsoDate } from '../date-utils.js';
 import { noPhotoPlaceholderHtml, pickImageFile, fileToResizedDataUrl } from '../photos.js';
 
 const SNOOZE_KEY = 'himori.seasonPromptSnoozeUntil';
-
-function shelfPhotoHtml(shelf, height) {
-  const photos = getPhotos();
-  const photoId = shelf.photoIds[shelf.photoIds.length - 1];
-  const photo = photoId ? photos.find((p) => p.id === photoId) : null;
-  const style = `height:${height}px;margin-bottom:10px`;
-  if (!photo) return noPhotoPlaceholderHtml('写真未登録', style);
-  return `<div class="photo-ph" style="${style}"><img src="${photo.uri}" alt=""></div>`;
-}
 
 function weekdayLabel(iso) {
   const d = new Date(iso + 'T00:00:00');
@@ -110,19 +100,70 @@ function weatherSourceHtml(weather) {
     </div>`;
 }
 
-function mainShelfCardHtml(shelves, profile, weather, burnLogs, offSeason) {
-  const { shelf, isSuggestion } = resolveMainShelf(shelves, profile);
-  if (!shelf)
-    return `<div class="empty">薪棚がまだ登録されていません。<button class="link-btn" data-action="open-add-shelf" style="padding:0">薪棚を登録する</button></div>`;
+// ホーム最上部の「今季の薪、足りる?」カード。充足率(既存のcomputeAnshinをそのまま使用)・
+// あと何日分(直近30日の焚いた頻度から推定、データ不足なら正直に「まだ予測できません」と
+// 伝える)・いつまで持つかの見込み・状態を一言で表す短文の4つを1つにまとめる。
+// 以前は「レギュラー薪棚の詳細カード」と「充足率のリング」が別々に存在し、
+// 「今年の薪は足りるのか」という一番知りたい答えが2箇所に分散していたため統合した。
+function seasonSummaryHtml(shelves, profile, burnLogs, currentSeason, previousSeason) {
+  const seasonCaption = currentSeason
+    ? `<svg class="icon" viewBox="0 0 24 24" style="width:11px;height:11px;vertical-align:-1px;margin-right:2px;color:var(--ember)"><use href="#i-flame"/></svg>今シーズン開始 ${currentSeason.startDate}`
+    : previousSeason
+      ? `前シーズン終了 ${previousSeason.endDate}`
+      : '';
 
-  const note = weather ? factualTodayNote(weather.daily) : null;
-  const daysLeft = estimateDaysLeft(shelf, burnLogs);
-  const daysLeftText = daysLeft == null ? '' : daysLeft >= 365 ? '・あと365日以上分' : `・あと${daysLeft}日分`;
-  const latestCheck = getChecksForShelf(shelf.id)[0] || null;
-  const advisory = shouldShowDryAdvisory(shelf, latestCheck)
-    ? `<div class="dry-advisory">乾燥日数・含水率の目安からすると、そろそろ乾燥薪かもしれません。</div>`
-    : '';
-  const moistureText = moistureDisplayText(latestCheck);
+  if (shelves.length === 0) {
+    return `
+      <div class="label-sm" style="margin-bottom:4px">今季の薪</div>
+      <div style="font-size:calc(13px * var(--font-scale));line-height:1.7">薪棚を登録すると、今季の見通しが分かります。</div>
+      <button class="link-btn" data-action="open-add-shelf" style="padding:8px 0 0">薪棚を登録する</button>
+    `;
+  }
+
+  const score = computeAnshin(shelves, profile.seasonTargetM3);
+  const totalUsable = sumUsable(shelves);
+  const daysLeft = estimateSeasonDaysLeft(shelves, burnLogs);
+
+  let amountText;
+  let untilText = '';
+  if (totalUsable <= 0) {
+    amountText = '使える薪がありません';
+  } else if (daysLeft == null) {
+    amountText = 'あと何日分かは、まだ予測できません';
+  } else if (daysLeft >= 365) {
+    amountText = 'あと365日以上分';
+  } else {
+    amountText = `あと約${daysLeft}日分`;
+    untilText = `このペースなら<b>${roughDateLabel(daysLeft)}</b>ごろまで`;
+  }
+
+  let statusText;
+  if (totalUsable <= 0) statusText = '薪を追加しておくと安心です。';
+  else if (daysLeft == null && shelves.length) statusText = '「今日、焚いた」の記録が増えると、見通しが分かってきます。';
+  else if (score >= 70) statusText = '十分にありそうです。';
+  else if (score >= 40) statusText = '今のところは安心です。';
+  else statusText = '少し不足する可能性があります。追加の薪を準備しておくと安心です。';
+
+  return `
+    <div style="display:flex;align-items:center;gap:16px">
+      <div class="ring-wrap">${ringSvg(score)}<div class="val">${score}%</div></div>
+      <div style="flex:1;min-width:0">
+        <div class="label-sm" style="margin-bottom:2px">今季の薪</div>
+        <div style="font-size:calc(15px * var(--font-scale));font-weight:700;line-height:1.4">${amountText}</div>
+        ${untilText ? `<div class="label-sm" style="margin-top:2px">${untilText}</div>` : ''}
+      </div>
+    </div>
+    <div style="font-size:calc(12.5px * var(--font-scale));line-height:1.7;margin-top:10px">${statusText}</div>
+    ${seasonCaption ? `<div class="label-sm" style="margin-top:8px;opacity:.85">${seasonCaption}</div>` : ''}
+  `;
+}
+
+// 「レギュラー薪棚」への導線だけを担うコンパクトな参照カード。乾燥状態・含水率などの
+// 詳細は薪棚チェック画面が既に担っているため、ここでは重複させず、写真・名前・残量と
+// 導線(タップでチェックへ/レギュラーの変更)だけに絞る。
+function mainShelfRefHtml(shelves, profile, offSeason) {
+  const { shelf, isSuggestion } = resolveMainShelf(shelves, profile);
+  if (!shelf) return '';
 
   // オフシーズン中に「レギュラーにしませんか」と急かすと違和感があるため、候補提示は
   // シーズン中だけ目立たせる(オフシーズンはニュートラルな表示に留める)。
@@ -132,20 +173,27 @@ function mainShelfCardHtml(shelves, profile, weather, burnLogs, offSeason) {
       : `<span class="badge amber">レギュラーの候補</span>`
     : `<span class="badge khaki">レギュラー薪棚</span>`;
   const actionHtml = isSuggestion
-    ? `<button class="link-btn" data-action="set-main-shelf" data-shelf-id="${shelf.id}">これをレギュラーにする</button>`
-    : `<button class="link-btn" data-action="pick-main-shelf">薪棚を変更</button><button class="link-btn" data-action="release-main-shelf" style="margin-left:12px">レギュラーを未設定に戻す</button>`;
+    ? `<button class="link-btn" data-action="set-main-shelf" data-shelf-id="${shelf.id}" style="padding:6px 0 0">これをレギュラーにする</button>`
+    : `<button class="link-btn" data-action="pick-main-shelf" style="padding:6px 0 0">薪棚を変更</button><button class="link-btn" data-action="release-main-shelf" style="padding:6px 0 0;margin-left:12px">レギュラーを未設定に戻す</button>`;
+
+  const photos = getPhotos();
+  const photoId = shelf.photoIds[shelf.photoIds.length - 1];
+  const photo = photoId ? photos.find((p) => p.id === photoId) : null;
+  const thumbHtml = photo
+    ? `<div class="photo-ph" style="width:52px;height:52px;flex-shrink:0"><img src="${photo.uri}" alt=""></div>`
+    : noPhotoPlaceholderHtml('', 'width:52px;height:52px;flex-shrink:0');
 
   return `
-    ${badgeHtml}
-    <div style="font-size:calc(15px * var(--font-scale));font-weight:700;margin:8px 0 10px">${shelf.name}</div>
-    ${shelfPhotoHtml(shelf, 96)}
-    <div class="row"><span class="label-sm">使える薪(残量)</span><span style="font-size:calc(12px * var(--font-scale));font-weight:700">約${shelf.usableVolumeM3}m³${daysLeftText}</span></div>
-    <div class="progress"><div style="width:${shelf.remainingPercent}%;background:${barColor(shelf.remainingPercent)}"></div></div>
-    ${moistureText ? `<div class="factual-note">${moistureText}</div>` : ''}
-    ${note ? `<div class="factual-note">${note}</div>` : ''}
-    ${advisory}
-    <div class="row" style="margin-top:10px">${actionHtml}</div>
-    ${isSuggestion ? `<div class="label-sm" style="margin-top:6px;line-height:1.6">レギュラーにすると、今後「今日、焚いた」の記録がこの薪棚のものとして数えられ、使用ペースから「あと何日分」の目安を計算します。残量(%)自体は自動で減らないので、正確な残量は薪棚チェックで更新してください。</div>` : ''}
+    <div style="display:flex;gap:12px;align-items:center;cursor:pointer" data-action="open-main-shelf-check">
+      ${thumbHtml}
+      <div style="flex:1;min-width:0">
+        ${badgeHtml}
+        <div style="font-size:calc(13px * var(--font-scale));font-weight:700;margin-top:3px">${shelf.name}</div>
+        <div class="label-sm">残量${shelf.remainingPercent}%・約${shelf.usableVolumeM3}m³</div>
+      </div>
+      <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px;color:var(--khaki);flex-shrink:0"><use href="#i-chevright"/></svg>
+    </div>
+    ${actionHtml}
   `;
 }
 
@@ -314,29 +362,20 @@ export function render() {
   }
   bannerEl.innerHTML = banners.join('');
 
-  document.getElementById('home-weather-strip').innerHTML = weatherStripHtml(weather);
-  document.getElementById('home-weather-source').innerHTML = weatherSourceHtml(weather);
-
-  document.getElementById('home-recommend').innerHTML = mainShelfCardHtml(shelves, profile, weather, burnLogs, offSeason);
-
-  const anshinEl = document.getElementById('home-anshin');
-  anshinEl.innerHTML = `
-    <div class="ring-wrap">${ringSvg(score)}<div class="val">${score}%</div></div>
-    <div>
-      <div style="font-size:calc(13px * var(--font-scale));font-weight:700;margin-bottom:3px">薪の充足率</div>
-      <div style="font-size:calc(11px * var(--font-scale));color:var(--khaki);line-height:1.6">使える薪(${sumUsable(shelves)}m³) ÷ 想定シーズン使用量(${profile.seasonTargetM3}m³)</div>
-    </div>
-  `;
-
   const seasons = getSeasons();
   const previousSeason = seasons.filter((s) => s.endDate).slice(-1)[0];
-  const seasonDateParts = [];
-  if (currentSeason)
-    seasonDateParts.push(
-      `<svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;vertical-align:-1px;margin-right:2px;color:var(--ember)"><use href="#i-flame"/></svg>今シーズン開始 ${currentSeason.startDate}`
-    );
-  if (previousSeason) seasonDateParts.push(`前シーズン終了 ${previousSeason.endDate}`);
-  document.getElementById('home-season-dates').innerHTML = seasonDateParts.join('・');
+
+  // 第1階層: 「今年の薪、足りる?」に5秒で答えるための最重要カード
+  document.getElementById('home-season-summary').innerHTML = seasonSummaryHtml(shelves, profile, burnLogs, currentSeason, previousSeason);
+
+  // 第4階層(暮らし): レギュラー薪棚への導線、天気は詳細情報として下の方に控えめに置く
+  const shelfRefEl = document.getElementById('home-shelf-ref');
+  const shelfRefHtml = mainShelfRefHtml(shelves, profile, offSeason);
+  shelfRefEl.innerHTML = shelfRefHtml;
+  shelfRefEl.style.display = shelfRefHtml ? '' : 'none';
+
+  document.getElementById('home-weather-strip').innerHTML = weatherStripHtml(weather);
+  document.getElementById('home-weather-source').innerHTML = weatherSourceHtml(weather);
 
   const mainLastCheck = mainShelf ? getChecksForShelf(mainShelf.id)[0] : null;
   document.getElementById('home-note').innerHTML = `
