@@ -32,11 +32,18 @@
     <div class="content">
       <div id="home-banner"></div>
 
-      <!-- 第1階層: 「今年の薪、足りる?」に一番早く答えるカード -->
+      <!-- 語り口: データより先に、季節や状態に応じたひとことを添える -->
+      <div id="home-note" style="margin:0 0 14px;line-height:1.7"></div>
+
+      <!-- 第1階層: 「今、自分がどれだけ薪を準備できているか」を実際の量で見せるカード -->
       <div class="card olive" id="home-season-summary"></div>
 
       <!-- 第2階層: 毎日の最重要操作 -->
       <button class="btn-primary" id="btn-burn-today"><svg class="icon" viewBox="0 0 24 24"><use href="#i-flame"/></svg>今日、焚いた</button>
+      <div class="label-sm" id="home-burn-days" style="text-align:center;margin-top:6px"></div>
+
+      <!-- 薪のある日々: 薪棚写真と、薪づくりの積み重ね -->
+      <div class="card" id="home-living" style="margin-top:14px"></div>
 
       <!-- 第3階層: ときどき行う操作 -->
       <div class="btn-row" style="margin-top:8px">
@@ -46,8 +53,7 @@
       </div>
 
       <!-- 第4階層: 薪ストーブのある暮らし -->
-      <div class="card" id="home-note"></div>
-      <div class="leather" id="home-shelf-ref" style="border-radius:var(--radius);padding:13px;margin-bottom:0"></div>
+      <div class="leather" id="home-shelf-ref" style="border-radius:var(--radius);padding:13px;margin-top:14px;margin-bottom:0"></div>
       <div class="leather" id="home-stove" data-action="open-maintenance" style="border-radius:var(--radius);padding:13px;display:flex;align-items:center;gap:12px;margin-top:10px;margin-bottom:0;cursor:pointer"></div>
       <div class="leather" data-action="open-woodtypes" style="border-radius:var(--radius);padding:12px 13px;display:flex;align-items:center;gap:12px;margin-top:10px;margin-bottom:0;cursor:pointer">
         <div style="width:40px;height:40px;border-radius:8px;background:rgba(154,196,106,.16);display:flex;align-items:center;justify-content:center;flex-shrink:0">

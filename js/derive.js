@@ -151,39 +151,6 @@ export function estimateDaysLeft(shelf, burnLogs) {
   return Math.min(365, Math.round(shelf.usableVolumeM3 / avgDaily));
 }
 
-// estimateDaysLeftと同じ考え方(直近30日の「焚いた」記録から日次消費ペースを推定する)
-// だが、対象を1つの薪棚ではなく「今シーズン使える薪の合計(来季用を除く)」に広げたもの。
-// ホームの「今年の薪、足りる?」は特定の1棚の残量ではなく、シーズン全体の在庫で
-// 判断すべきものなので、ここでは焚いた記録もどの薪棚かを問わず日付だけで数える
-// (「今日、焚いた」は必ずレギュラー薪棚に記録されるため、実質的には家庭全体の
-// 焚く頻度をそのまま表す)。データが少なすぎる場合の考え方はestimateDaysLeftと同じ。
-export function estimateSeasonDaysLeft(shelves, burnLogs) {
-  const totalUsable = shelves
-    .filter((s) => s.status !== '来季用')
-    .reduce((sum, s) => sum + s.usableVolumeM3, 0);
-  if (totalUsable <= 0) return 0;
-  const windowDays = 30;
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - windowDays);
-  const cutoffIso = localIsoDate(cutoff);
-  const recentCount = burnLogs.filter((b) => b.date >= cutoffIso).length;
-  if (recentCount < 3) return null;
-  const avgDaily = (recentCount * BURN_CONSUMPTION_M3) / windowDays;
-  return Math.min(365, Math.round(totalUsable / avgDaily));
-}
-
-// 「あと◯日分」を実際のカレンダー上の目安時期に変換する。「2027/02/03まで」のような
-// 過度に精密な表示は、あくまで推定値であることを見誤らせるため、上旬/中旬/下旬の
-// 粒度に丸める。
-export function roughDateLabel(daysFromNow) {
-  const d = new Date();
-  d.setDate(d.getDate() + daysFromNow);
-  const month = d.getMonth() + 1;
-  const day = d.getDate();
-  const part = day <= 10 ? '上旬' : day <= 20 ? '中旬' : '下旬';
-  return `${month}月${part}`;
-}
-
 // 今シーズン使える薪の合計(来季用を除く)が安心ラインを下回っているか
 export function isBelowSafetyLine(shelves, safetyLineM3) {
   if (!safetyLineM3) return false;

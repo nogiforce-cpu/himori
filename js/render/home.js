@@ -8,6 +8,8 @@ import {
   getChecksForShelf,
   getMaintenanceLogs,
   getWoodTypeCatalog,
+  getWoodAdditions,
+  getSplitLogs,
   addBurnLog,
   removeBurnLog,
   getWeatherCache,
@@ -23,8 +25,6 @@ import {
 import {
   resolveMainShelf,
   computeAnshin,
-  estimateSeasonDaysLeft,
-  roughDateLabel,
   isBelowSafetyLine,
   isOffSeason,
   seasonPhase,
@@ -100,61 +100,50 @@ function weatherSourceHtml(weather) {
     </div>`;
 }
 
-// ホーム最上部の「今季の薪、足りる?」カード。充足率(既存のcomputeAnshinをそのまま使用)・
-// あと何日分(直近30日の焚いた頻度から推定、データ不足なら正直に「まだ予測できません」と
-// 伝える)・いつまで持つかの見込み・状態を一言で表す短文の4つを1つにまとめる。
-// 以前は「レギュラー薪棚の詳細カード」と「充足率のリング」が別々に存在し、
-// 「今年の薪は足りるのか」という一番知りたい答えが2箇所に分散していたため統合した。
-function seasonSummaryHtml(shelves, profile, burnLogs, currentSeason, previousSeason) {
-  const seasonCaption = currentSeason
-    ? `<svg class="icon" viewBox="0 0 24 24" style="width:11px;height:11px;vertical-align:-1px;margin-right:2px;color:var(--ember)"><use href="#i-flame"/></svg>今シーズン開始 ${currentSeason.startDate}`
-    : previousSeason
-      ? `前シーズン終了 ${previousSeason.endDate}`
-      : '';
-
+// ホーム最上部の「今季の薪」カード。以前は充足率(%)・あと何日分・いつまで持つかという
+// 「不足するかもしれない不安」を軸にした構成だったが、薪の消費ペースは気温・焚き方・
+// 樹種などで大きく変わり、精度の低い予測を正確そうに見せることになっていた。
+// 今は「今、実際に何m³の薪があるか」という事実だけを、乾燥済み/乾燥中/来季用に
+// 分けてそのまま見せる形に変更している(m³は薪ストーブユーザーが自分の蓄えを
+// 実感しやすい単位)。充足率そのものは削除せず、週次まとめ(review.js)では
+// 引き続きcomputeAnshinを使って詳しく見られるようにしてある。
+function seasonWoodHtml(shelves) {
   if (shelves.length === 0) {
     return `
       <div class="label-sm" style="margin-bottom:4px">今季の薪</div>
-      <div style="font-size:calc(13px * var(--font-scale));line-height:1.7">薪棚を登録すると、今季の見通しが分かります。</div>
+      <div style="font-size:calc(13px * var(--font-scale));line-height:1.7">薪棚を登録すると、今、自分がどれだけ薪を準備できているかが見えてきます。</div>
       <button class="link-btn" data-action="open-add-shelf" style="padding:8px 0 0">薪棚を登録する</button>
     `;
   }
 
-  const score = computeAnshin(shelves, profile.seasonTargetM3);
-  const totalUsable = sumUsable(shelves);
-  const daysLeft = estimateSeasonDaysLeft(shelves, burnLogs);
+  const sum = (status) =>
+    Math.round(shelves.filter((s) => s.status === status).reduce((v, s) => v + s.usableVolumeM3, 0) * 100) / 100;
+  const dried = sum('乾燥済み');
+  const drying = sum('乾燥中');
+  const nextSeason = sum('来季用');
 
-  let amountText;
-  let untilText = '';
-  if (totalUsable <= 0) {
-    amountText = '使える薪がありません';
-  } else if (daysLeft == null) {
-    amountText = 'あと何日分かは、まだ予測できません';
-  } else if (daysLeft >= 365) {
-    amountText = 'あと365日以上分';
-  } else {
-    amountText = `あと約${daysLeft}日分`;
-    untilText = `このペースなら<b>${roughDateLabel(daysLeft)}</b>ごろまで`;
+  if (dried <= 0 && drying <= 0 && nextSeason <= 0) {
+    return `
+      <div class="label-sm" style="margin-bottom:4px">今季の薪</div>
+      <div style="font-size:calc(13px * var(--font-scale));line-height:1.7">今はまだ薪がありません。薪を追加すると、ここに積み上がっていきます。</div>
+    `;
   }
 
-  let statusText;
-  if (totalUsable <= 0) statusText = '薪を追加しておくと安心です。';
-  else if (daysLeft == null && shelves.length) statusText = '「今日、焚いた」の記録が増えると、見通しが分かってきます。';
-  else if (score >= 70) statusText = '十分にありそうです。';
-  else if (score >= 40) statusText = '今のところは安心です。';
-  else statusText = '少し不足する可能性があります。追加の薪を準備しておくと安心です。';
+  const row = (label, value, note) =>
+    value > 0
+      ? `<div style="display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:1px solid rgba(242,234,214,.1)">
+          <span style="font-size:calc(13px * var(--font-scale))">${label}${note ? `<span class="label-sm" style="margin-left:6px">${note}</span>` : ''}</span>
+          <span style="font-size:calc(16px * var(--font-scale));font-weight:700">${value}<span style="font-size:calc(11px * var(--font-scale));font-weight:400">m³</span></span>
+        </div>`
+      : '';
 
   return `
-    <div style="display:flex;align-items:center;gap:16px">
-      <div class="ring-wrap">${ringSvg(score)}<div class="val">${score}%</div></div>
-      <div style="flex:1;min-width:0">
-        <div class="label-sm" style="margin-bottom:2px">今季の薪</div>
-        <div style="font-size:calc(15px * var(--font-scale));font-weight:700;line-height:1.4">${amountText}</div>
-        ${untilText ? `<div class="label-sm" style="margin-top:2px">${untilText}</div>` : ''}
-      </div>
+    <div class="label-sm" style="margin-bottom:2px">今季の薪</div>
+    <div style="margin-top:6px">
+      ${row('乾燥薪', dried)}
+      ${row('乾燥中', drying, '次の冬へ準備中')}
+      ${row('来季用', nextSeason, '再来季へ準備中')}
     </div>
-    <div style="font-size:calc(12.5px * var(--font-scale));line-height:1.7;margin-top:10px">${statusText}</div>
-    ${seasonCaption ? `<div class="label-sm" style="margin-top:8px;opacity:.85">${seasonCaption}</div>` : ''}
   `;
 }
 
@@ -189,11 +178,80 @@ function mainShelfRefHtml(shelves, profile, offSeason) {
       <div style="flex:1;min-width:0">
         ${badgeHtml}
         <div style="font-size:calc(13px * var(--font-scale));font-weight:700;margin-top:3px">${shelf.name}</div>
-        <div class="label-sm">残量${shelf.remainingPercent}%・約${shelf.usableVolumeM3}m³</div>
+        <div class="label-sm">使える薪 約${shelf.usableVolumeM3}m³(残量${shelf.remainingPercent}%)</div>
       </div>
       <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px;color:var(--khaki);flex-shrink:0"><use href="#i-chevright"/></svg>
     </div>
     ${actionHtml}
+  `;
+}
+
+// 「今日、焚いた」ボタンの下に添える、今シーズン(進行中ならその時点まで、オフシーズンなら
+// 直近に終えたシーズンの実績を振り返り)何日、火を焚いたかの記録。「◯m³消費した」ではなく
+// 「◯日、火のある暮らしをした」という記録として見せる(同じ日に複数回記録しても
+// 日数は重複して増えないよう、日付の重複を除いて数える)。
+function burnDaysLine(currentSeason, previousSeason, burnLogs) {
+  const countDays = (fromIso, toIso) =>
+    new Set(burnLogs.filter((b) => b.date >= fromIso && (!toIso || b.date <= toIso)).map((b) => b.date)).size;
+  if (currentSeason) {
+    const days = countDays(currentSeason.startDate, null);
+    if (days > 0) return `今季${days}日、火を焚きました`;
+    return '';
+  }
+  if (previousSeason) {
+    const days = countDays(previousSeason.startDate, previousSeason.endDate);
+    if (days > 0) return `前シーズンは${days}日、火を焚きました`;
+  }
+  return '';
+}
+
+// 「薪のある日々」カード: 薪棚の最新写真と、直近の薪づくり(薪割り・薪の追加)の
+// 積み重ねを見せる。集計期間は「前シーズンが終わった日」を起点にする。これは
+// 焚いている最中かどうかに関わらず、次の冬に向けた薪づくりが常に同じ1つの区切りの
+// 中で積み上がっていくようにするため(シーズンが始まった瞬間に夏の作業実績が
+// 0にリセットされて消えてしまうのを避ける)。記録が何もなければ表示しない。
+function livingWithWoodHtml(previousSeason) {
+  const cycleStart = previousSeason?.endDate ?? null;
+  const inCycle = (iso) => !cycleStart || iso > cycleStart;
+
+  const photos = getPhotos()
+    .filter((p) => p.category === '薪棚')
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  const recentPhotos = photos.slice(0, 3);
+
+  const splitCount = getSplitLogs().filter((s) => inCycle(s.date)).length;
+  const addedVolume =
+    Math.round(
+      getWoodAdditions()
+        .filter((a) => inCycle(a.date))
+        .reduce((sum, a) => sum + a.addedVolumeM3, 0) * 100
+    ) / 100;
+
+  if (recentPhotos.length === 0 && splitCount === 0 && addedVolume <= 0) return '';
+
+  const photoStrip = recentPhotos.length
+    ? `<div style="display:flex;gap:6px;margin-bottom:${splitCount || addedVolume > 0 ? '10px' : '0'}">
+        ${recentPhotos.map((p) => `<div class="photo-ph" style="width:64px;height:64px;flex-shrink:0"><img src="${p.uri}" alt=""></div>`).join('')}
+      </div>`
+    : '';
+
+  const stats = [];
+  if (splitCount > 0)
+    stats.push(
+      `<div style="display:flex;align-items:center;gap:6px"><img src="assets/icon-axe.png" alt="" style="width:15px;height:15px;object-fit:contain">薪割り ${splitCount}回</div>`
+    );
+  if (addedVolume > 0)
+    stats.push(
+      `<div style="display:flex;align-items:center;gap:6px"><svg class="icon" viewBox="0 0 24 24" style="width:15px;height:15px;color:var(--green)"><use href="#i-plus"/></svg>増えた薪 ${addedVolume}m³</div>`
+    );
+  const statsHtml = stats.length
+    ? `<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:calc(12.5px * var(--font-scale))">${stats.join('')}</div>`
+    : '';
+
+  return `
+    <div class="label-sm" style="margin-bottom:8px">薪のある日々</div>
+    ${photoStrip}
+    ${statsHtml}
   `;
 }
 
@@ -270,7 +328,7 @@ function hitokoto(ctx) {
       rotate([
         'しっかり焚けるだけの蓄えがあります。',
         'この量なら、多少の寒波が来ても慌てずに済みます。',
-        '在庫としては上出来です。あとは乾燥が進むのを待つだけです。',
+        'よく準備できています。あとは乾燥が進むのを待つだけです。',
       ])
     );
   } else if (score >= 40) {
@@ -288,7 +346,7 @@ function hitokoto(ctx) {
     }
   } else {
     parts.push(
-      rotate(['残量が少なめです。', 'そろそろ棚の底が見えてきた頃合いです。', '在庫は薄めです。'])
+      rotate(['薪棚の残りが少なくなってきました。', 'そろそろ棚の底が見えてきた頃合いです。', '薪を足すと、また安心して焚けます。'])
     );
   }
   const peakRisk = weather ? upcoming48hRisk(weather.daily) : null;
@@ -365,22 +423,11 @@ export function render() {
   const seasons = getSeasons();
   const previousSeason = seasons.filter((s) => s.endDate).slice(-1)[0];
 
-  // 第1階層: 「今年の薪、足りる?」に5秒で答えるための最重要カード
-  document.getElementById('home-season-summary').innerHTML = seasonSummaryHtml(shelves, profile, burnLogs, currentSeason, previousSeason);
-
-  // 第4階層(暮らし): レギュラー薪棚への導線、天気は詳細情報として下の方に控えめに置く
-  const shelfRefEl = document.getElementById('home-shelf-ref');
-  const shelfRefHtml = mainShelfRefHtml(shelves, profile, offSeason);
-  shelfRefEl.innerHTML = shelfRefHtml;
-  shelfRefEl.style.display = shelfRefHtml ? '' : 'none';
-
-  document.getElementById('home-weather-strip').innerHTML = weatherStripHtml(weather);
-  document.getElementById('home-weather-source').innerHTML = weatherSourceHtml(weather);
-
+  // 今日のひとこと(季節や状態に応じて表情を変える、ホームの語り口)。
+  // データ・数字より先に、まず気持ちを添えたいので今季の薪カードより上に置く。
   const mainLastCheck = mainShelf ? getChecksForShelf(mainShelf.id)[0] : null;
   document.getElementById('home-note').innerHTML = `
-    <div class="label-sm" style="margin-bottom:5px">今日のひとこと</div>
-    <div style="font-size:calc(12px * var(--font-scale));line-height:1.7">${hitokoto({
+    <div style="font-size:calc(12.5px * var(--font-scale));line-height:1.7">${hitokoto({
       score,
       shelf: mainShelf,
       weather,
@@ -394,6 +441,30 @@ export function render() {
       photos: getPhotos(),
     })}</div>
   `;
+
+  // 第1階層: 「今、自分がどれだけ薪を準備できているか」を事実ベースで見せるカード
+  document.getElementById('home-season-summary').innerHTML = seasonWoodHtml(shelves);
+
+  // 第2階層直下: 「今日、焚いた」の下に、今シーズン何日火を焚いたかの振り返り
+  const burnDaysEl = document.getElementById('home-burn-days');
+  const burnDaysText = burnDaysLine(currentSeason, previousSeason, burnLogs);
+  burnDaysEl.textContent = burnDaysText;
+  burnDaysEl.style.display = burnDaysText ? '' : 'none';
+
+  // 薪のある日々: 薪棚写真と、薪づくり(薪割り・薪の追加)の積み重ね
+  const livingEl = document.getElementById('home-living');
+  const livingHtml = livingWithWoodHtml(previousSeason);
+  livingEl.innerHTML = livingHtml;
+  livingEl.style.display = livingHtml ? '' : 'none';
+
+  // 暮らし: レギュラー薪棚への導線。天気は詳細情報として下の方に控えめに置く
+  const shelfRefEl = document.getElementById('home-shelf-ref');
+  const shelfRefHtml = mainShelfRefHtml(shelves, profile, offSeason);
+  shelfRefEl.innerHTML = shelfRefHtml;
+  shelfRefEl.style.display = shelfRefHtml ? '' : 'none';
+
+  document.getElementById('home-weather-strip').innerHTML = weatherStripHtml(weather);
+  document.getElementById('home-weather-source').innerHTML = weatherSourceHtml(weather);
 
   const stoveEl = document.getElementById('home-stove');
   const years = stoveYears(profile.stove.purchaseDate);
@@ -417,20 +488,6 @@ export function render() {
   `;
 }
 
-function sumUsable(shelves) {
-  const v = shelves.filter((s) => s.status !== '来季用').reduce((sum, s) => sum + s.usableVolumeM3, 0);
-  return Math.round(v * 100) / 100;
-}
-
-function ringSvg(score) {
-  const c = 213.6;
-  const offset = c * (1 - score / 100);
-  return `
-    <svg viewBox="0 0 80 80">
-      <circle cx="40" cy="40" r="34" stroke="#171912" stroke-width="8" fill="none"/>
-      <circle cx="40" cy="40" r="34" stroke="#D97732" stroke-width="8" fill="none" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${offset}"/>
-    </svg>`;
-}
 
 export function handleBurnToday() {
   const shelves = getShelves();
@@ -441,7 +498,7 @@ export function handleBurnToday() {
     return;
   }
   if (shelf.usableVolumeM3 <= 0) {
-    showToast('薪棚に使える薪がありません。「薪を追加」から補充してください。');
+    showToast('この薪棚はまだ空のようです。薪を追加してから記録してみてください。');
     return;
   }
   // トースト表示だけだと見逃しやすく「押したのに反応したか分からない」となるため、
