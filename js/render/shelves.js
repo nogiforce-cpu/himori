@@ -1,21 +1,33 @@
-import { getShelves, getPhotos, getProfile, getChecksForShelf } from '../store.js';
-import { barColor, daysBetween, shouldShowDryAdvisory, moistureDisplayText } from '../derive.js';
+import { getShelves, getPhotos, getProfile, getChecksForShelf, getWoodAdditions } from '../store.js';
+import { daysBetween, monthDayLabel, shelfStatusLabel, shelfStatusNote, shelfStatusBadgeColor } from '../derive.js';
 import { go } from '../ui.js';
 import { state } from '../state.js';
 import { noPhotoPlaceholderHtml } from '../photos.js';
 import { openShelfEditSheet } from './sheets.js';
-
-function statusBadgeColor(status) {
-  if (status === '乾燥済み') return 'green';
-  if (status === '来季用') return 'khaki';
-  return 'amber';
-}
 
 function shelfPhotoThumbHtml(shelf, photos) {
   const photoId = shelf.photoIds[shelf.photoIds.length - 1];
   const photo = photoId ? photos.find((p) => p.id === photoId) : null;
   if (!photo) return noPhotoPlaceholderHtml();
   return `<div class="photo-ph"><img src="${photo.uri}" alt=""></div>`;
+}
+
+// 「残量75%減った」ではなく、直近の変化を中立的な事実として一言添える(前回チェックとの
+// 差分、または直近の薪追加のどちらか新しい方)。増減どちらであっても煽った言い回しには
+// しない。
+function recentChangeNote(shelf) {
+  const checks = getChecksForShelf(shelf.id);
+  const additions = getWoodAdditions().filter((a) => a.shelfId === shelf.id);
+  const latestAddition = additions.length ? additions.reduce((a, b) => (a.date > b.date ? a : b)) : null;
+  if (latestAddition && (!checks[1] || latestAddition.date >= checks[1].date)) {
+    return `${monthDayLabel(latestAddition.date)}に${latestAddition.addedVolumeM3}m³追加`;
+  }
+  if (checks.length >= 2) {
+    const diff = Math.round((checks[0].usableVolumeM3 - checks[1].usableVolumeM3) * 100) / 100;
+    if (diff < 0) return `前回から${Math.abs(diff)}m³使用`;
+    if (diff > 0) return `前回から${diff}m³増加`;
+  }
+  return '';
 }
 
 export function render() {
@@ -39,12 +51,12 @@ export function render() {
           ${noPhotoPlaceholderHtml()}
           <div class="info">
             <div class="shelf-name">薪棚の名前</div>
-            <span class="badge khaki">乾燥中</span>
-            <div class="row" style="margin-top:6px"><span class="label-sm">残量70%・約1.5m³</span></div>
-            <div class="progress"><div style="width:70%;background:var(--khaki)"></div></div>
+            <div style="font-size:calc(13px * var(--font-scale));font-weight:700;margin-top:6px">乾燥中 1.5m³</div>
+            <div class="label-sm">次の冬へ準備中</div>
           </div>
         </div>
-        <button class="btn-primary" data-action="open-add-shelf" style="width:100%;margin-top:14px">＋ 最初の薪棚を登録する</button>
+        <div class="label-sm" style="text-align:center;margin:12px 0">最初の薪棚を登録しましょう。サイズと写真を登録すると、薪の記録を始められます。</div>
+        <button class="btn-primary" data-action="open-add-shelf" style="width:100%">＋ 最初の薪棚を登録する</button>
       `
         : `<div class="empty">該当する薪棚がありません。</div>`;
     return;
@@ -53,27 +65,22 @@ export function render() {
   const profile = getProfile();
   listEl.innerHTML = shelves
     .map((s) => {
-      const lastDays = daysBetween(s.lastCheckedAt);
-      const dryingDays = s.dryingStartedAt ? daysBetween(s.dryingStartedAt) : null;
       const isMain = profile.mainShelfId === s.id;
-      const latestCheck = getChecksForShelf(s.id)[0] || null;
-      const advisory = shouldShowDryAdvisory(s, latestCheck)
-        ? `<div class="dry-advisory" style="margin-top:5px">そろそろ乾燥が進んでいるかもしれません</div>`
-        : '';
-      const moistureText = moistureDisplayText(latestCheck);
+      const statusNote = shelfStatusNote(s.status);
+      const changeNote = recentChangeNote(s);
+      const lastCheckText = s.lastCheckedAt ? monthDayLabel(s.lastCheckedAt) : 'まだ記録がありません';
       return `
       <div class="shelf-card" data-action="open-shelf-check" data-shelf-id="${s.id}">
         ${shelfPhotoThumbHtml(s, photos)}
         <div class="info">
-          <div class="shelf-name">${s.name}${isMain ? '<span class="main-tag">レギュラー</span>' : ''}</div>
-          <span class="badge ${statusBadgeColor(s.status)}">${s.status}</span>
-          <div class="row" style="margin-top:6px"><span class="label-sm">残量${s.remainingPercent}%・約${s.usableVolumeM3}m³</span></div>
-          <div class="progress"><div style="width:${s.remainingPercent}%;background:${barColor(s.remainingPercent)}"></div></div>
-          <div class="label-sm" style="margin-top:5px">最終チェック:${lastDays}日前${dryingDays != null ? `・乾燥経過${dryingDays}日` : ''}</div>
+          <div class="shelf-name">${s.name}${isMain ? '<span class="main-tag">いつもの薪棚</span>' : ''}</div>
+          <div class="row" style="margin-top:6px;align-items:baseline">
+            <span style="font-size:calc(13px * var(--font-scale));font-weight:700">${shelfStatusLabel(s.status)} ${s.usableVolumeM3}m³</span>
+          </div>
+          ${statusNote ? `<div class="label-sm">${statusNote}</div>` : ''}
+          <div class="label-sm" style="margin-top:5px">最終チェック ${lastCheckText}</div>
+          ${changeNote ? `<div class="label-sm">${changeNote}</div>` : ''}
           ${s.woodTypes?.length ? `<div class="label-sm">樹種:${s.woodTypes.join('・')}</div>` : ''}
-          ${moistureText ? `<div class="label-sm">${moistureText}</div>` : ''}
-          ${advisory}
-          ${isMain ? `<button class="link-btn" style="padding:6px 0 0" data-action="release-main-shelf">レギュラーを解除</button>` : s.status === '来季用' ? '' : `<button class="link-btn" style="padding:6px 0 0" data-action="set-main-shelf" data-shelf-id="${s.id}">レギュラーにする</button>`}
         </div>
         <button class="iconbtn" data-action="edit-shelf-from-list" data-shelf-id="${s.id}" style="flex-shrink:0"><svg class="icon" viewBox="0 0 24 24" style="width:17px;height:17px"><use href="#i-edit"/></svg></button>
       </div>`;

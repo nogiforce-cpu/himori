@@ -98,13 +98,18 @@
   <section class="screen" data-tab="check">
     <div class="topbar">
       <button class="iconbtn" id="btn-check-back"><svg class="icon" viewBox="0 0 24 24"><use href="#i-back"/></svg></button>
-      <span class="title">薪棚チェック記録</span>
+      <span class="title">薪棚チェック</span>
       <span style="width:44px"></span>
     </div>
     <div class="content">
-      <div class="card" id="check-shelf-header" style="display:flex;gap:12px;align-items:center"></div>
+      <div class="card" id="check-shelf-header"></div>
       <div id="check-body">
+        <div class="label-sm" style="margin:14px 0 6px;font-weight:700">最近の変化</div>
+        <div class="card" id="check-history"></div>
+        <div class="label-sm" style="margin:14px 0 6px;font-weight:700">薪棚の記録(写真)</div>
+        <div class="card" id="check-photo-record"></div>
         <div id="check-weather-note" class="factual-note"></div>
+        <div class="label-sm" style="margin:14px 0 6px;font-weight:700">今日の薪棚を記録する</div>
         <div class="card" id="checklist"></div>
         <div class="card" id="check-residual"></div>
         <div class="field">
@@ -112,9 +117,7 @@
           <textarea class="box" id="check-memo" placeholder="気づいたことがあれば"></textarea>
         </div>
         <div class="field" id="check-moisture-field"></div>
-        <button class="btn-primary" id="btn-check-save">チェックを記録する</button>
-        <div class="label-sm" style="margin:16px 0 8px;font-weight:700">チェック履歴</div>
-        <div class="card" id="check-history"></div>
+        <button class="btn-primary" id="btn-check-save">薪棚を記録する</button>
       </div>
     </div>
   </section>

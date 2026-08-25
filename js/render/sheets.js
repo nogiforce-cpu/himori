@@ -882,6 +882,10 @@ export function openShelfEditSheet(shelfId, onSaved) {
   const shelf = getShelf(shelfId);
   if (!shelf) return;
   const statuses = ['乾燥済み', '乾燥中', '来季用'];
+  // レギュラー薪棚の設定・解除は、以前は薪棚一覧のカード上に常時表示していたが、
+  // 「見る場所」と「設定する場所」を分ける方針にしたため、他の設定項目と同じく
+  // この編集シートに集約する。
+  const wasMain = getProfile().mainShelfId === shelfId;
   const ov = openOverlay(`
     <div class="sheet">
       <div class="row" style="margin-bottom:10px">
@@ -904,6 +908,10 @@ export function openShelfEditSheet(shelfId, onSaved) {
         <input class="box" id="shelf-edit-drying" type="date" value="${shelf.dryingStartedAt ?? ''}">
       </div>
       ${photoFieldHtml('shelf-edit-photo', getPhotos().find((p) => p.id === shelf.photoIds[shelf.photoIds.length - 1])?.uri || null)}
+      <div class="field" style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="shelf-edit-is-main" ${wasMain ? 'checked' : ''} style="width:18px;height:18px;flex-shrink:0">
+        <label for="shelf-edit-is-main" style="margin:0">いつもの薪棚にする</label>
+      </div>
       <button class="btn-primary" id="shelf-edit-save">保存する</button>
       <button class="btn-ghost" id="shelf-edit-delete" style="width:100%;margin-top:8px;color:var(--red)">この薪棚を削除</button>
     </div>
@@ -927,6 +935,9 @@ export function openShelfEditSheet(shelfId, onSaved) {
         photoIds = [...shelf.photoIds, addPhoto({ category: '薪棚', date: todayIso(), uri: photo.uri }).id];
       }
       updateShelf(shelfId, { name, status, dryingStartedAt, totalVolumeM3, usableVolumeM3, remainingPercent, photoIds });
+      const isMainNow = ov.querySelector('#shelf-edit-is-main').checked;
+      if (isMainNow && !wasMain) updateProfile({ mainShelfId: shelfId });
+      else if (!isMainNow && wasMain) updateProfile({ mainShelfId: null });
       closeOverlay();
       showToast('薪棚を更新しました');
       onSaved && onSaved();

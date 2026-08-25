@@ -36,6 +36,25 @@ export function barColor(pct) {
   return 'var(--green)';
 }
 
+// 薪棚の乾燥状態(status)にまつわる語彙・色を1箇所にまとめる。以前はホーム・薪棚一覧・
+// 薪棚チェックのそれぞれで似た分岐が個別に書かれていたため、言葉がバラバラになる
+// リスクがあった(例: 「使用可能」「残量」など画面ごとに違う言い方になる)。
+export function shelfStatusLabel(status) {
+  if (status === '乾燥済み') return '乾燥薪';
+  if (status === '来季用') return '来季用';
+  return '乾燥中';
+}
+export function shelfStatusNote(status) {
+  if (status === '乾燥中') return '次の冬へ準備中';
+  if (status === '来季用') return '再来季へ準備中';
+  return '';
+}
+export function shelfStatusBadgeColor(status) {
+  if (status === '乾燥済み') return 'green';
+  if (status === '来季用') return 'khaki';
+  return 'amber';
+}
+
 export function daysBetween(fromIso, toIso = todayIso()) {
   const from = new Date(fromIso + 'T00:00:00');
   const to = new Date(toIso + 'T00:00:00');
@@ -44,6 +63,13 @@ export function daysBetween(fromIso, toIso = todayIso()) {
 
 export function todayIso() {
   return localIsoDate();
+}
+
+// 「163日前」より「8月24日」の方が、いつの記録か直感的に分かる場面で使う共通の
+// 日付表示(ホーム「薪のある日々」・薪棚一覧・薪棚チェックなど複数画面で使う)。
+export function monthDayLabel(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
 }
 
 // 乾燥済み薪棚を優先し、乾いた順(dryingStartedAtが古い順)に使う。

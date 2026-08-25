@@ -34,6 +34,8 @@ import {
   daysBetween,
   stoveYears,
   todayIso,
+  monthDayLabel,
+  shelfStatusLabel,
   BURN_CONSUMPTION_M3,
 } from '../derive.js';
 import { upcoming48hRisk, upcomingDaysSummary } from '../weather.js';
@@ -180,7 +182,7 @@ function mainShelfRefHtml(shelves, profile) {
 
   // 上の「今季の薪」カードと同じ言葉遣い(乾燥薪/乾燥中/来季用)で揃え、
   // 「残量◯%」のような別の言い回しを重ねて出さないようにする。
-  const amountLabel = shelf.status === '乾燥済み' ? '乾燥薪' : shelf.status === '来季用' ? '来季用' : '乾燥中';
+  const amountLabel = shelfStatusLabel(shelf.status);
 
   return `
     <div class="label-sm" style="margin-bottom:8px">いつもの薪棚</div>
@@ -212,11 +214,6 @@ function burnDaysLine(currentSeason, previousSeason, burnLogs) {
     if (days > 0) return `前シーズンは${days}日、火を焚きました`;
   }
   return '';
-}
-
-function monthDayLabel(iso) {
-  const d = new Date(iso + 'T00:00:00');
-  return `${d.getMonth() + 1}月${d.getDate()}日`;
 }
 
 // 「薪のある日々」カード: 薪割り・薪の追加・薪棚チェックといった、種類の違う出来事を

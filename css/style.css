@@ -280,4 +280,4 @@ textarea.box{width:100%;border:0;resize:none;font-family:inherit;color:var(--cre
    最低気温だけを、寒さが一目でわかる青いバッジに白抜き文字で表示する。 */
 .cal-day .cal-temp{display:inline-block;align-self:center;font-size:calc(9px * var(--font-scale));font-weight:700;color:var(--cream);background:var(--rain);border-radius:3px;padding:1px 5px;margin-top:3px;white-space:nowrap}
 
-.main-tag{font-size:calc(9px * var(--font-scale));font-weight:700;color:var(--green);border:1px solid rgba(154,196,106,.4);padding:2px 6px;border-radius:4px;margin-left:6px}
+.main-tag{font-size:calc(9px * var(--font-scale));font-weight:700;color:var(--green);border:1px solid rgba(154,196,106,.4);padding:2px 6px;border-radius:4px;margin-left:6px;white-space:nowrap;display:inline-block}
