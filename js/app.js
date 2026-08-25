@@ -166,6 +166,7 @@ function wireStatic() {
 const ACTIONS = {
   'open-add-shelf': () => openAddShelfSheet(renderAll),
   'open-woodtypes': () => openWoodTypeCollectionSheet(),
+  'toggle-weather-detail': () => home.toggleWeatherDetail(),
   'open-shelf-check': (el) => shelves.openShelfCheck(el.dataset.shelfId),
   'edit-shelf-from-list': (el) => shelves.editShelfFromList(el.dataset.shelfId),
   'pick-shelf': () => check.pickShelf(),

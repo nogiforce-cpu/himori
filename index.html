@@ -59,17 +59,19 @@
         <div style="width:40px;height:40px;border-radius:8px;background:rgba(154,196,106,.16);display:flex;align-items:center;justify-content:center;flex-shrink:0">
           <img src="assets/icon-woodtype.png" alt="" style="width:32px;height:32px;object-fit:contain">
         </div>
-        <div style="flex:1">
-          <div style="font-size:calc(10px * var(--font-scale));color:var(--leather-text);letter-spacing:.5px">図鑑</div>
-          <div class="slab" style="font-size:calc(14px * var(--font-scale));font-weight:700">樹種コレクションを見る</div>
-        </div>
+        <div id="home-woodtypes" style="flex:1;min-width:0"></div>
         <svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--leather-text)"><use href="#i-chevright"/></svg>
       </div>
 
-      <!-- 第5階層: 詳細情報(天気の目安。48時間以内の警戒は上のバナーで既に伝えているので、
-           ここでは参考程度の扱いにする) -->
-      <div class="weather-strip" id="home-weather-strip" style="margin-top:14px"></div>
-      <div id="home-weather-source" style="margin:-4px 0 0"></div>
+      <!-- 第5階層: 詳細情報。天気は「薪ストーブ生活の文脈での一言」だけを常時表示し、
+           数日分の予報・出典は折りたたみの中に格納する(48時間以内の警戒は上の
+           バナーで既に伝えているので、ここでは参考程度の扱いにする) -->
+      <div class="label-sm" id="home-weather-context" style="margin-top:16px"></div>
+      <button class="link-btn" id="btn-weather-detail-toggle" data-action="toggle-weather-detail" style="padding:4px 0">詳しい天気を見る</button>
+      <div id="home-weather-detail" style="display:none">
+        <div class="weather-strip" id="home-weather-strip" style="margin-top:6px"></div>
+        <div id="home-weather-source" style="margin:8px 0 0"></div>
+      </div>
     </div>
   </section>
 

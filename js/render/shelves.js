@@ -73,7 +73,7 @@ export function render() {
           ${s.woodTypes?.length ? `<div class="label-sm">樹種:${s.woodTypes.join('・')}</div>` : ''}
           ${moistureText ? `<div class="label-sm">${moistureText}</div>` : ''}
           ${advisory}
-          ${isMain || s.status === '来季用' ? '' : `<button class="link-btn" style="padding:6px 0 0" data-action="set-main-shelf" data-shelf-id="${s.id}">レギュラーにする</button>`}
+          ${isMain ? `<button class="link-btn" style="padding:6px 0 0" data-action="release-main-shelf">レギュラーを解除</button>` : s.status === '来季用' ? '' : `<button class="link-btn" style="padding:6px 0 0" data-action="set-main-shelf" data-shelf-id="${s.id}">レギュラーにする</button>`}
         </div>
         <button class="iconbtn" data-action="edit-shelf-from-list" data-shelf-id="${s.id}" style="flex-shrink:0"><svg class="icon" viewBox="0 0 24 24" style="width:17px;height:17px"><use href="#i-edit"/></svg></button>
       </div>`;

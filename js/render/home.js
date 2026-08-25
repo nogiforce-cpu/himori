@@ -100,6 +100,22 @@ function weatherSourceHtml(weather) {
     </div>`;
 }
 
+// ホーム下部の天気は「気象情報を表示する」のではなく「薪ストーブ生活の文脈で
+// 一言だけ伝える」ことを目的にする。数日分の詳細・出典表記は情報として正しくても
+// ホームには重いため、詳しい内容は「詳しい天気を見る」の折りたたみに格納し、
+// ここでは明日の予報から意味のある時だけ短い一文を出す(平常運転の日は何も言わない
+// 方が、過剰な擬人化・毎日同じ定型文の繰り返しを避けられる)。
+function weatherContextLine(weather, phase) {
+  if (!weather?.daily?.length) return '';
+  const tomorrow = weather.daily[1] || weather.daily[0];
+  if (!tomorrow) return '';
+  if (tomorrow.precipCategory === 'snow') return `明日は雪の予報です。最高${tomorrow.tempMax}℃。`;
+  if (phase !== 'off' && tomorrow.tempMin <= 5) return `明日は冷え込みそうです。最低${tomorrow.tempMin}℃。火が恋しい一日になりそうです。`;
+  if (tomorrow.tempMax >= 30) return '明日も暑くなりそうです。薪仕事は涼しい時間に。';
+  if (tomorrow.precipCategory === 'rain') return '明日は雨の予報です。';
+  return '';
+}
+
 // ホーム最上部の「今季の薪」カード。以前は充足率(%)・あと何日分・いつまで持つかという
 // 「不足するかもしれない不安」を軸にした構成だったが、薪の消費ペースは気温・焚き方・
 // 樹種などで大きく変わり、精度の低い予測を正確そうに見せることになっていた。
@@ -147,23 +163,13 @@ function seasonWoodHtml(shelves) {
   `;
 }
 
-// 「レギュラー薪棚」への導線だけを担うコンパクトな参照カード。乾燥状態・含水率などの
-// 詳細は薪棚チェック画面が既に担っているため、ここでは重複させず、写真・名前・残量と
-// 導線(タップでチェックへ/レギュラーの変更)だけに絞る。
-function mainShelfRefHtml(shelves, profile, offSeason) {
-  const { shelf, isSuggestion } = resolveMainShelf(shelves, profile);
+// 「いつもの薪棚」への導線だけを担う、ごく簡素な参照カード。乾燥状態・含水率・
+// レギュラーの変更などはすべて薪棚一覧・薪棚チェック画面がすでに担っているため、
+// ホームでは写真・名前・量ひとつだけを見せてタップでチェックへ渡す(以前あった
+// 「薪棚を変更」「レギュラーを未設定に戻す」等の設定操作はホームから外した)。
+function mainShelfRefHtml(shelves, profile) {
+  const { shelf } = resolveMainShelf(shelves, profile);
   if (!shelf) return '';
-
-  // オフシーズン中に「レギュラーにしませんか」と急かすと違和感があるため、候補提示は
-  // シーズン中だけ目立たせる(オフシーズンはニュートラルな表示に留める)。
-  const badgeHtml = isSuggestion
-    ? offSeason
-      ? `<span class="badge khaki">薪棚(レギュラー未設定)</span>`
-      : `<span class="badge amber">レギュラーの候補</span>`
-    : `<span class="badge khaki">レギュラー薪棚</span>`;
-  const actionHtml = isSuggestion
-    ? `<button class="link-btn" data-action="set-main-shelf" data-shelf-id="${shelf.id}" style="padding:6px 0 0">これをレギュラーにする</button>`
-    : `<button class="link-btn" data-action="pick-main-shelf" style="padding:6px 0 0">薪棚を変更</button><button class="link-btn" data-action="release-main-shelf" style="padding:6px 0 0;margin-left:12px">レギュラーを未設定に戻す</button>`;
 
   const photos = getPhotos();
   const photoId = shelf.photoIds[shelf.photoIds.length - 1];
@@ -172,17 +178,20 @@ function mainShelfRefHtml(shelves, profile, offSeason) {
     ? `<div class="photo-ph" style="width:52px;height:52px;flex-shrink:0"><img src="${photo.uri}" alt=""></div>`
     : noPhotoPlaceholderHtml('', 'width:52px;height:52px;flex-shrink:0');
 
+  // 上の「今季の薪」カードと同じ言葉遣い(乾燥薪/乾燥中/来季用)で揃え、
+  // 「残量◯%」のような別の言い回しを重ねて出さないようにする。
+  const amountLabel = shelf.status === '乾燥済み' ? '乾燥薪' : shelf.status === '来季用' ? '来季用' : '乾燥中';
+
   return `
+    <div class="label-sm" style="margin-bottom:8px">いつもの薪棚</div>
     <div style="display:flex;gap:12px;align-items:center;cursor:pointer" data-action="open-main-shelf-check">
       ${thumbHtml}
       <div style="flex:1;min-width:0">
-        ${badgeHtml}
-        <div style="font-size:calc(13px * var(--font-scale));font-weight:700;margin-top:3px">${shelf.name}</div>
-        <div class="label-sm">使える薪 約${shelf.usableVolumeM3}m³(残量${shelf.remainingPercent}%)</div>
+        <div style="font-size:calc(14px * var(--font-scale));font-weight:700">${shelf.name}</div>
+        <div class="label-sm">${amountLabel} ${shelf.usableVolumeM3}m³</div>
       </div>
       <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px;color:var(--khaki);flex-shrink:0"><use href="#i-chevright"/></svg>
     </div>
-    ${actionHtml}
   `;
 }
 
@@ -205,53 +214,115 @@ function burnDaysLine(currentSeason, previousSeason, burnLogs) {
   return '';
 }
 
-// 「薪のある日々」カード: 薪棚の最新写真と、直近の薪づくり(薪割り・薪の追加)の
-// 積み重ねを見せる。集計期間は「前シーズンが終わった日」を起点にする。これは
-// 焚いている最中かどうかに関わらず、次の冬に向けた薪づくりが常に同じ1つの区切りの
-// 中で積み上がっていくようにするため(シーズンが始まった瞬間に夏の作業実績が
-// 0にリセットされて消えてしまうのを避ける)。記録が何もなければ表示しない。
-function livingWithWoodHtml(previousSeason) {
+function monthDayLabel(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
+}
+
+// 「薪のある日々」カード: 薪割り・薪の追加・薪棚チェックといった、種類の違う出来事を
+// 直近3件、日付とともに並べる(以前は薪棚写真3枚だけを並べていたため、同じ薪棚を
+// 何度も撮っていると代わり映えのない見た目になっていた)。集計期間は「前シーズンが
+// 終わった日」を起点にする。これは焚いている最中かどうかに関わらず、次の冬に向けた
+// 薪づくりが常に同じ1つの区切りの中で積み上がっていくようにするため(シーズンが
+// 始まった瞬間に夏の作業実績が0にリセットされて消えてしまうのを避ける)。
+// 将来、これらの記録を横断的に振り返れる「暮らしのタイムライン」へ発展させる場合も、
+// ここで組み立てているイベント配列(date/thumb/text)がそのまま土台になる想定。
+function livingWithWoodEvents(shelves, previousSeason) {
   const cycleStart = previousSeason?.endDate ?? null;
   const inCycle = (iso) => !cycleStart || iso > cycleStart;
+  const photos = getPhotos();
+  const events = [];
 
-  const photos = getPhotos()
-    .filter((p) => p.category === '薪棚')
-    .sort((a, b) => (a.date < b.date ? 1 : -1));
-  const recentPhotos = photos.slice(0, 3);
+  getWoodAdditions()
+    .filter((a) => inCycle(a.date))
+    .forEach((a) => {
+      const photo = a.photoId ? photos.find((p) => p.id === a.photoId) : null;
+      events.push({ date: a.date, photo, icon: '#i-plus', iconColor: 'var(--green)', text: `薪が${a.addedVolumeM3}m³増えました` });
+    });
+  getSplitLogs()
+    .filter((s) => inCycle(s.date))
+    .forEach((s) => {
+      events.push({
+        date: s.date,
+        photo: null,
+        img: 'assets/icon-axe.png',
+        text: s.volumeM3 ? `薪割りをしました(${s.volumeM3}m³)` : '薪割りをしました',
+      });
+    });
+  getChecks()
+    .filter((c) => inCycle(c.date))
+    .forEach((c) => {
+      const shelf = shelves.find((s) => s.id === c.shelfId);
+      events.push({ date: c.date, photo: null, icon: '#i-check', text: `${shelf?.name ?? '薪棚'}をチェックしました` });
+    });
 
-  const splitCount = getSplitLogs().filter((s) => inCycle(s.date)).length;
-  const addedVolume =
-    Math.round(
-      getWoodAdditions()
-        .filter((a) => inCycle(a.date))
-        .reduce((sum, a) => sum + a.addedVolumeM3, 0) * 100
-    ) / 100;
+  events.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  const top = events.slice(0, 3);
 
-  if (recentPhotos.length === 0 && splitCount === 0 && addedVolume <= 0) return '';
+  // 出来事だけでは3件に満たない時は、直近の薪棚写真で埋めて寂しくならないようにする
+  // (すでにイベントの写真として使われた1枚は重複させない)。
+  if (top.length < 3) {
+    const usedPhotoIds = new Set(top.map((e) => e.photo?.id).filter(Boolean));
+    const fillerPhotos = photos
+      .filter((p) => p.category === '薪棚' && !usedPhotoIds.has(p.id))
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+    for (const p of fillerPhotos) {
+      if (top.length >= 3) break;
+      top.push({ date: p.date, photo: p, text: '薪棚の様子を記録しました' });
+    }
+    top.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  }
 
-  const photoStrip = recentPhotos.length
-    ? `<div style="display:flex;gap:6px;margin-bottom:${splitCount || addedVolume > 0 ? '10px' : '0'}">
-        ${recentPhotos.map((p) => `<div class="photo-ph" style="width:64px;height:64px;flex-shrink:0"><img src="${p.uri}" alt=""></div>`).join('')}
-      </div>`
-    : '';
+  return top;
+}
 
-  const stats = [];
-  if (splitCount > 0)
-    stats.push(
-      `<div style="display:flex;align-items:center;gap:6px"><img src="assets/icon-axe.png" alt="" style="width:15px;height:15px;object-fit:contain">薪割り ${splitCount}回</div>`
-    );
-  if (addedVolume > 0)
-    stats.push(
-      `<div style="display:flex;align-items:center;gap:6px"><svg class="icon" viewBox="0 0 24 24" style="width:15px;height:15px;color:var(--green)"><use href="#i-plus"/></svg>増えた薪 ${addedVolume}m³</div>`
-    );
-  const statsHtml = stats.length
-    ? `<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:calc(12.5px * var(--font-scale))">${stats.join('')}</div>`
-    : '';
+function livingWithWoodHtml(shelves, previousSeason) {
+  const events = livingWithWoodEvents(shelves, previousSeason);
+  if (events.length === 0) return '';
+
+  const rows = events
+    .map((e) => {
+      const thumb = e.photo
+        ? `<div class="thumb"><img src="${e.photo.uri}" alt=""></div>`
+        : e.img
+          ? `<div class="thumb icon"><img src="${e.img}" alt=""></div>`
+          : `<div class="thumb icon"><svg class="icon" viewBox="0 0 24 24" style="${e.iconColor ? `color:${e.iconColor}` : ''}"><use href="${e.icon}"/></svg></div>`;
+      return `
+        <div class="event-row">
+          ${thumb}
+          <div class="text">
+            <div>${e.text}</div>
+            <div class="label-sm">${monthDayLabel(e.date)}</div>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
 
   return `
-    <div class="label-sm" style="margin-bottom:8px">薪のある日々</div>
-    ${photoStrip}
-    ${statsHtml}
+    <div class="label-sm" style="margin-bottom:2px">薪のある日々</div>
+    ${rows}
+  `;
+}
+
+// 樹種コレクションへの入口を「見る」という操作の案内ではなく、すでに自分が
+// 集めてきた成果として見せる(0種の時だけ、素直に案内文にする)。
+function woodtypeCollectionHtml(catalog) {
+  if (catalog.length === 0) {
+    return `
+      <div style="flex:1">
+        <div style="font-size:calc(10px * var(--font-scale));color:var(--leather-text);letter-spacing:.5px">図鑑</div>
+        <div class="slab" style="font-size:calc(14px * var(--font-scale));font-weight:700">樹種コレクションを見る</div>
+      </div>
+    `;
+  }
+  const names = catalog.slice(0, 4).join('・') + (catalog.length > 4 ? '…' : '');
+  return `
+    <div style="flex:1;min-width:0">
+      <div style="font-size:calc(10px * var(--font-scale));color:var(--leather-text);letter-spacing:.5px">薪の図鑑</div>
+      <div class="slab" style="font-size:calc(14px * var(--font-scale));font-weight:700">集めた樹種 ${catalog.length}種</div>
+      <div class="label-sm" style="margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${names}</div>
+    </div>
   `;
 }
 
@@ -261,49 +332,39 @@ function dayOfYear(iso) {
   return Math.floor((d - start) / 86400000);
 }
 
-// オフシーズン用のひとことは「焚ける/焚けない」の二択ではなく、その時々で意味のある
-// アドバイスをいくつか候補に挙げ、日替わりでローテーションする(薪ストーブ好きの人が
-// 興味を持ちそうな切り口: 乾燥・メンテ・樹種記録・写真記録など)。
+// オフシーズンの語り口は、まず季節そのものを前向きに感じられる一言(main)を必ず出し、
+// 注意喚起(暑さ対策など)や実務的な提案(チェック・メンテ・記録)は控えめな補足(note)に
+// 格下げする。以前はこれらが同じ抽選プールに入っていたため、日によっては「暑いので
+// 無理せず」のような注意喚起だけがホームを開いた瞬間の第一声になってしまっていた。
 function offSeasonTip({ weather, shelves, allChecks, maintenanceLogs, woodTypeCatalog, photos }) {
-  const candidates = [];
+  const mainLines = [
+    '次の冬へ、薪が育つ季節です。',
+    '冬を待ちながら、薪を育てる季節です。',
+    '良い薪は、シーズンが始まってから慌てて作るものではなく、今つくられています。',
+    '静かな季節ですが、暖炉のある暮らしはこの時期の下ごしらえで決まります。',
+  ];
+  const main = mainLines[dayOfYear(todayIso()) % mainLines.length];
+
+  const notes = [];
   const todayWeather = weather?.daily?.[0];
   if (todayWeather && todayWeather.tempMax >= 30) {
-    candidates.push('暑い時期です。薪割りなど力仕事は無理をせず、水分補給も忘れずに。');
+    notes.push('暑い日の薪仕事は無理せずに。');
   }
   const dryShelf = shelves.find((s) =>
     shouldShowDryAdvisory(s, allChecks.filter((c) => c.shelfId === s.id).sort((a, b) => (a.date < b.date ? 1 : -1))[0] || null)
   );
-  if (dryShelf) candidates.push(`${dryShelf.name}はそろそろ乾燥薪かもしれません。乾燥状態を確認しておくと安心です。`);
-
+  if (dryShelf) notes.push(`${dryShelf.name}はそろそろ乾燥薪かもしれません。`);
   if (shelves.length) {
     const maxDaysSinceCheck = Math.max(...shelves.map((s) => daysBetween(s.lastCheckedAt)));
-    if (maxDaysSinceCheck >= 60) {
-      candidates.push('しばらく薪棚をチェックしていないようです。虫・カビや雨漏りがないか見ておくと安心です。');
-    }
+    if (maxDaysSinceCheck >= 60) notes.push('しばらく薪棚をチェックしていないようです。');
   }
-  if (woodTypeCatalog.length < 2) {
-    candidates.push('焚いた樹種を記録しておくと、樹種コレクションが賑わってきますよ。');
-  }
+  if (woodTypeCatalog.length < 2) notes.push('焚いた樹種を記録しておくと、樹種コレクションが賑わってきますよ。');
   const hasRecentPhoto = photos.some((p) => daysBetween(p.date) <= 30);
-  if (!hasRecentPhoto) {
-    candidates.push('薪棚の様子を写真に残しておくと、後で見返した時に面白いですよ。');
-  }
+  if (!hasRecentPhoto) notes.push('薪棚の様子を写真に残しておくと、後で見返した時に面白いですよ。');
   const lastMaint = maintenanceLogs[0];
-  if (!lastMaint || daysBetween(lastMaint.date) >= 300) {
-    candidates.push('ストーブのメンテナンス(煙突掃除やガスケットの状態)を確認するのに良い時期です。');
-  }
-  // 締めの一言は複数の言い回しを用意し、日替わりで表情を変える(元の実装は1本だけだった
-  // 枠を、複数の視点で書いた文の中から日替わりで1本選ぶ形にする。他の具体的な候補を
-  // 薄めすぎないよう、この枠自体は依然として1つ分のままにする)。
-  const closingLines = [
-    'オフシーズンです。薪棚チェックやストーブのメンテナンスをしておくと、シーズン入りがスムーズです。',
-    '火を入れていない時期こそ、薪と道具の状態がよく見えるものです。',
-    '良い薪は、シーズンが始まってから慌てて作るものではなく、オフシーズンの今つくられています。',
-    '静かな季節ですが、暖炉のある暮らしはこの時期の下ごしらえで決まります。',
-  ];
-  candidates.push(closingLines[dayOfYear(todayIso()) % closingLines.length]);
+  if (!lastMaint || daysBetween(lastMaint.date) >= 300) notes.push('ストーブのメンテナンスを確認するのに良い時期です。');
 
-  return candidates[dayOfYear(todayIso()) % candidates.length];
+  return { main, note: notes[0] || '' };
 }
 
 function hitokoto(ctx) {
@@ -311,47 +372,40 @@ function hitokoto(ctx) {
   if (phase === 'off') return offSeasonTip(ctx);
   if (phase === 'shoulder') {
     const month = Number(todayIso().slice(5, 7));
-    return [10, 11].includes(month)
-      ? 'シーズンが近づいてきました。薪棚のチェックと乾燥具合の確認をしておくと安心です。'
-      : 'シーズンも落ち着いてきました。来季に向けて薪棚を整理しておくとスムーズです。';
+    return {
+      main: [10, 11].includes(month) ? 'シーズンが近づいてきました。' : 'シーズンも落ち着いてきました。',
+      note: [10, 11].includes(month) ? '薪棚のチェックと乾燥具合の確認をしておくと安心です。' : '来季に向けて薪棚を整理しておくとスムーズです。',
+    };
   }
   if (offSeason) {
-    return 'しばらく焚いていないようです。無理のない範囲で薪棚の様子を見ておくと安心です。';
+    return { main: 'しばらく焚いていないようです。', note: '無理のない範囲で薪棚の様子を見ておくと安心です。' };
   }
-  if (!shelf) return '薪棚がまだ登録されていません。「薪を追加」から始めましょう。';
+  if (!shelf) return { main: '薪棚がまだ登録されていません。', note: '「薪を追加」から始めましょう。' };
   // 状態ごとの一言も、日替わりで複数の言い回しから選ぶ(同じ状態が続く間ずっと
   // 同じ一文が表示され続けると単調なため。いずれも他者の発言の引用ではなくオリジナル)。
   const rotate = (lines) => lines[dayOfYear(todayIso()) % lines.length];
-  const parts = [];
+  let main;
+  let note = '';
   if (score >= 70) {
-    parts.push(
-      rotate([
-        'しっかり焚けるだけの蓄えがあります。',
-        'この量なら、多少の寒波が来ても慌てずに済みます。',
-        'よく準備できています。あとは乾燥が進むのを待つだけです。',
-      ])
-    );
+    main = rotate([
+      'しっかり焚けるだけの蓄えがあります。',
+      'この量なら、多少の寒波が来ても慌てずに済みます。',
+      'よく準備できています。あとは乾燥が進むのを待つだけです。',
+    ]);
   } else if (score >= 40) {
     const daysSinceCheck = lastCheckDate ? daysBetween(lastCheckDate) : null;
     if (daysSinceCheck == null || daysSinceCheck >= 14) {
-      parts.push(
-        rotate([
-          '今のところは焚けますが、薪棚チェック(乾燥状態・虫カビ・雨漏りなど)をしておくとより安心です。',
-          '焚く分には困らない量ですが、しばらく棚を見ていないなら一度様子を確認しておきたいところです。',
-          '量は足りていますが、質(乾燥具合)は見た目では分かりません。チェックしておくと安心です。',
-        ])
-      );
+      main = rotate(['今のところは焚けています。', '焚く分には困らない量です。', '量は足りています。']);
+      note = '薪棚チェックで乾燥状態や虫・カビの様子も見ておくと、より安心です。';
     } else {
-      parts.push(rotate(['今のところは焚けます。', '今のところは順調です。', '今日も問題なく焚けそうです。']));
+      main = rotate(['今のところは焚けます。', '今のところは順調です。', '今日も問題なく焚けそうです。']);
     }
   } else {
-    parts.push(
-      rotate(['薪棚の残りが少なくなってきました。', 'そろそろ棚の底が見えてきた頃合いです。', '薪を足すと、また安心して焚けます。'])
-    );
+    main = rotate(['薪棚の残りが少なくなってきました。', 'そろそろ棚の底が見えてきた頃合いです。', '薪を足すと、また安心して焚けます。']);
   }
   const peakRisk = weather ? upcoming48hRisk(weather.daily) : null;
-  if (peakRisk) parts.push('冷え込みや雨の予報があるので、多めに運んでおくと安心です。');
-  return parts.join('');
+  if (peakRisk) note = note ? note : '冷え込みや雨の予報があるので、多めに運んでおくと安心です。';
+  return { main, note };
 }
 
 export function render() {
@@ -426,20 +480,22 @@ export function render() {
   // 今日のひとこと(季節や状態に応じて表情を変える、ホームの語り口)。
   // データ・数字より先に、まず気持ちを添えたいので今季の薪カードより上に置く。
   const mainLastCheck = mainShelf ? getChecksForShelf(mainShelf.id)[0] : null;
+  const note = hitokoto({
+    score,
+    shelf: mainShelf,
+    weather,
+    offSeason,
+    phase,
+    lastCheckDate: mainLastCheck?.date ?? null,
+    shelves,
+    allChecks: getChecks(),
+    maintenanceLogs: getMaintenanceLogs(),
+    woodTypeCatalog: getWoodTypeCatalog(),
+    photos: getPhotos(),
+  });
   document.getElementById('home-note').innerHTML = `
-    <div style="font-size:calc(12.5px * var(--font-scale));line-height:1.7">${hitokoto({
-      score,
-      shelf: mainShelf,
-      weather,
-      offSeason,
-      phase,
-      lastCheckDate: mainLastCheck?.date ?? null,
-      shelves,
-      allChecks: getChecks(),
-      maintenanceLogs: getMaintenanceLogs(),
-      woodTypeCatalog: getWoodTypeCatalog(),
-      photos: getPhotos(),
-    })}</div>
+    <div style="font-size:calc(14px * var(--font-scale));font-weight:600">${note.main}</div>
+    ${note.note ? `<div class="label-sm" style="margin-top:4px">${note.note}</div>` : ''}
   `;
 
   // 第1階層: 「今、自分がどれだけ薪を準備できているか」を事実ベースで見せるカード
@@ -453,18 +509,15 @@ export function render() {
 
   // 薪のある日々: 薪棚写真と、薪づくり(薪割り・薪の追加)の積み重ね
   const livingEl = document.getElementById('home-living');
-  const livingHtml = livingWithWoodHtml(previousSeason);
+  const livingHtml = livingWithWoodHtml(shelves, previousSeason);
   livingEl.innerHTML = livingHtml;
   livingEl.style.display = livingHtml ? '' : 'none';
 
-  // 暮らし: レギュラー薪棚への導線。天気は詳細情報として下の方に控えめに置く
+  // 暮らし: レギュラー薪棚への導線
   const shelfRefEl = document.getElementById('home-shelf-ref');
-  const shelfRefHtml = mainShelfRefHtml(shelves, profile, offSeason);
+  const shelfRefHtml = mainShelfRefHtml(shelves, profile);
   shelfRefEl.innerHTML = shelfRefHtml;
   shelfRefEl.style.display = shelfRefHtml ? '' : 'none';
-
-  document.getElementById('home-weather-strip').innerHTML = weatherStripHtml(weather);
-  document.getElementById('home-weather-source').innerHTML = weatherSourceHtml(weather);
 
   const stoveEl = document.getElementById('home-stove');
   const years = stoveYears(profile.stove.purchaseDate);
@@ -480,12 +533,25 @@ export function render() {
       <div style="font-size:calc(10px * var(--font-scale));color:var(--leather-text);letter-spacing:.5px">薪ストーブ</div>
       <div class="slab" style="font-size:calc(14px * var(--font-scale));font-weight:700">${profile.stove.name}</div>
     </div>
-    ${years ? `<div style="font-size:calc(9px * var(--font-scale));color:#d9c6a8;border:1px solid rgba(242,234,214,.25);padding:3px 7px;border-radius:4px;flex-shrink:0">使用${years}年目</div>` : ''}
+    ${years ? `<div style="font-size:calc(9px * var(--font-scale));color:#d9c6a8;border:1px solid rgba(242,234,214,.25);padding:3px 7px;border-radius:4px;flex-shrink:0">火のある暮らし、${years}年目</div>` : ''}
     <div style="display:flex;align-items:center;gap:2px;flex-shrink:0;color:var(--leather-text)">
       <span style="font-size:calc(10px * var(--font-scale));white-space:nowrap">メンテ記録</span>
       <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg>
     </div>
   `;
+
+  document.getElementById('home-woodtypes').innerHTML = woodtypeCollectionHtml(getWoodTypeCatalog());
+
+  // 詳細情報(第5階層): 薪ストーブ生活の文脈での短い一言だけを常時表示し、
+  // 数日分の予報・出典は「詳しい天気を見る」の折りたたみに格納する
+  const weatherContextEl = document.getElementById('home-weather-context');
+  const contextText = weatherContextLine(weather, phase);
+  weatherContextEl.textContent = contextText;
+  weatherContextEl.style.display = contextText ? '' : 'none';
+  const weatherToggleEl = document.getElementById('btn-weather-detail-toggle');
+  weatherToggleEl.style.display = weather ? '' : 'none';
+  document.getElementById('home-weather-strip').innerHTML = weatherStripHtml(weather);
+  document.getElementById('home-weather-source').innerHTML = weatherSourceHtml(weather);
 }
 
 
@@ -636,4 +702,15 @@ export function openMainShelfCheck() {
 
 export function openSplitLogFromHome() {
   openSplitLogSheet(() => render());
+}
+
+// 「詳しい天気を見る」の開閉。render()のたびに畳んだ状態へ戻る(常時展開しておく
+// ほどの情報ではないため、開いたままにする状態は持たせていない)。
+export function toggleWeatherDetail() {
+  const el = document.getElementById('home-weather-detail');
+  const btn = document.getElementById('btn-weather-detail-toggle');
+  if (!el) return;
+  const show = el.style.display === 'none';
+  el.style.display = show ? '' : 'none';
+  if (btn) btn.textContent = show ? '天気を閉じる' : '詳しい天気を見る';
 }
