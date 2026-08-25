@@ -36,11 +36,13 @@ import {
   todayIso,
   monthDayLabel,
   shelfStatusLabel,
+  buildLivingWithWoodEvents,
   BURN_CONSUMPTION_M3,
 } from '../derive.js';
 import { upcoming48hRisk, upcomingDaysSummary } from '../weather.js';
 import { showToast, go, openOverlay, closeOverlay } from '../ui.js';
 import { openSenseNoteSheet, openShelfPickerSheet, openPhotoViewSheet, openSplitLogSheet } from './sheets.js';
+import { eventRowHtml } from './event-row.js';
 import { state } from '../state.js';
 import { localIsoDate } from '../date-utils.js';
 import { noPhotoPlaceholderHtml, pickImageFile, fileToResizedDataUrl } from '../photos.js';
@@ -222,39 +224,24 @@ function burnDaysLine(currentSeason, previousSeason, burnLogs) {
 // 終わった日」を起点にする。これは焚いている最中かどうかに関わらず、次の冬に向けた
 // 薪づくりが常に同じ1つの区切りの中で積み上がっていくようにするため(シーズンが
 // 始まった瞬間に夏の作業実績が0にリセットされて消えてしまうのを避ける)。
-// 将来、これらの記録を横断的に振り返れる「暮らしのタイムライン」へ発展させる場合も、
-// ここで組み立てているイベント配列(date/thumb/text)がそのまま土台になる想定。
+// カレンダー・アルバムと共通のbuildLivingWithWoodEvents(derive.js)から作り、
+// ここでは「薪をつくる」記録(追加・薪割り・チェック)だけに絞って取り出す
+// (今日焚いた・メンテはこのカードのスコープ外。カレンダーの日別詳細では両方とも見える)。
 function livingWithWoodEvents(shelves, previousSeason) {
   const cycleStart = previousSeason?.endDate ?? null;
   const inCycle = (iso) => !cycleStart || iso > cycleStart;
   const photos = getPhotos();
-  const events = [];
 
-  getWoodAdditions()
-    .filter((a) => inCycle(a.date))
-    .forEach((a) => {
-      const photo = a.photoId ? photos.find((p) => p.id === a.photoId) : null;
-      events.push({ date: a.date, photo, icon: '#i-plus', iconColor: 'var(--green)', text: `薪が${a.addedVolumeM3}m³増えました` });
-    });
-  getSplitLogs()
-    .filter((s) => inCycle(s.date))
-    .forEach((s) => {
-      events.push({
-        date: s.date,
-        photo: null,
-        img: 'assets/icon-axe.png',
-        text: s.volumeM3 ? `薪割りをしました(${s.volumeM3}m³)` : '薪割りをしました',
-      });
-    });
-  getChecks()
-    .filter((c) => inCycle(c.date))
-    .forEach((c) => {
-      const shelf = shelves.find((s) => s.id === c.shelfId);
-      events.push({ date: c.date, photo: null, icon: '#i-check', text: `${shelf?.name ?? '薪棚'}をチェックしました` });
-    });
-
-  events.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-  const top = events.slice(0, 3);
+  const all = buildLivingWithWoodEvents({
+    shelves,
+    woodAdditions: getWoodAdditions(),
+    splitLogs: getSplitLogs(),
+    checks: getChecks(),
+    burnLogs: getBurnLogs(),
+    maintenanceLogs: getMaintenanceLogs(),
+    photos,
+  });
+  const top = all.filter((e) => ['addition', 'split', 'check'].includes(e.type) && inCycle(e.date)).slice(0, 3);
 
   // 出来事だけでは3件に満たない時は、直近の薪棚写真で埋めて寂しくならないようにする
   // (すでにイベントの写真として使われた1枚は重複させない)。
@@ -277,24 +264,7 @@ function livingWithWoodHtml(shelves, previousSeason) {
   const events = livingWithWoodEvents(shelves, previousSeason);
   if (events.length === 0) return '';
 
-  const rows = events
-    .map((e) => {
-      const thumb = e.photo
-        ? `<div class="thumb"><img src="${e.photo.uri}" alt=""></div>`
-        : e.img
-          ? `<div class="thumb icon"><img src="${e.img}" alt=""></div>`
-          : `<div class="thumb icon"><svg class="icon" viewBox="0 0 24 24" style="${e.iconColor ? `color:${e.iconColor}` : ''}"><use href="${e.icon}"/></svg></div>`;
-      return `
-        <div class="event-row">
-          ${thumb}
-          <div class="text">
-            <div>${e.text}</div>
-            <div class="label-sm">${monthDayLabel(e.date)}</div>
-          </div>
-        </div>
-      `;
-    })
-    .join('');
+  const rows = events.map((e) => eventRowHtml(e, monthDayLabel(e.date))).join('');
 
   return `
     <div class="label-sm" style="margin-bottom:2px">薪のある日々</div>

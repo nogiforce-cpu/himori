@@ -129,6 +129,14 @@ svg.icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;s
 .stat-card .l{font-size:calc(10px * var(--font-scale));color:var(--khaki)}
 .album-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px}
 .album-grid .photo-ph{aspect-ratio:1;border-radius:8px;cursor:pointer}
+
+/* アルバム本編は「写真が主役」にするため、日別詳細の小さな3列グリッドとは別に、
+   2列・大きめカードで写真を見せる。キャプション(薪棚名+日付)は控えめに写真の下へ。 */
+.album-feed{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px}
+.album-feed .photo-card{background:var(--card);border-radius:10px;overflow:hidden;cursor:pointer}
+.album-feed .photo-card .photo-ph{aspect-ratio:1;border-radius:0}
+.album-feed .photo-card .cap{padding:7px 9px 9px}
+.album-feed .photo-card .cap .name{font-size:calc(12px * var(--font-scale));font-weight:700;color:var(--cream);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .month-label{font-size:calc(12px * var(--font-scale));color:var(--khaki);font-weight:700;margin:10px 0 8px}
 .settings-section{margin-bottom:16px}
 .settings-title{font-size:calc(11px * var(--font-scale));color:var(--khaki);font-weight:700;margin-bottom:6px;padding-left:2px}
@@ -276,6 +284,7 @@ textarea.box{width:100%;border:0;resize:none;font-family:inherit;color:var(--cre
    大きくして気づきやすくする。 */
 .cal-day .cal-icons .ic-maint{color:var(--bg);background:var(--green);border-radius:4px;padding:2px;width:15px;height:15px}
 .cal-day .cal-icons .ic-photo{color:var(--muted)}
+.cal-day .cal-icons .ic-work{color:var(--khaki)}
 /* 薪ストーブは「冷え込んだ時に焚く」ものなので、最高気温より最低気温の方が実用的。
    最低気温だけを、寒さが一目でわかる青いバッジに白抜き文字で表示する。 */
 .cal-day .cal-temp{display:inline-block;align-self:center;font-size:calc(9px * var(--font-scale));font-weight:700;color:var(--cream);background:var(--rain);border-radius:3px;padding:1px 5px;margin-top:3px;white-space:nowrap}

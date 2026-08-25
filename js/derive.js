@@ -315,6 +315,96 @@ export function dryFriendlyDaysCount(dailyWeather) {
   ).length;
 }
 
+// 写真1枚が「どの薪棚の記録か」を、新しい永続フィールドを増やさずに逆引きする。
+// 薪棚の記録用写真はshelf.photoIdsに積まれ、薪追加時の写真はwoodAddition.photoIdに
+// 個別に紐づくため、この2箇所だけ確認すれば十分(メンテ・ストーブ写真は薪棚に紐付かない)。
+export function resolvePhotoShelfId(photoId, shelves, woodAdditions) {
+  const shelf = shelves.find((s) => s.photoIds?.includes(photoId));
+  if (shelf) return shelf.id;
+  const addition = woodAdditions.find((a) => a.photoId === photoId);
+  return addition ? addition.shelfId : null;
+}
+
+// 樹種ごとの「最初に記録された日」を、既存データ(薪追加・樹種写真)から逆算する。
+// 樹種名を手入力しただけでまだ薪追加も写真も無い場合は日付が無いので、その樹種は含めない
+// (無い日付を新たに作り出さない)。
+export function firstWoodTypeDates(woodAdditions, photos) {
+  const map = new Map();
+  const consider = (name, date) => {
+    if (!name || !date) return;
+    const cur = map.get(name);
+    if (!cur || date < cur) map.set(name, date);
+  };
+  woodAdditions.forEach((a) => consider(a.woodType, a.date));
+  photos.filter((p) => p.category === '樹種').forEach((p) => consider(p.woodType, p.date));
+  return map;
+}
+
+function photoEventText(photo) {
+  if (photo.category === '薪棚') return '薪棚の様子を記録しました';
+  if (photo.category === 'ストーブ') return '愛機の写真を残しました';
+  if (photo.category === '樹種') return `${photo.woodType ?? '樹種'}を記録しました`;
+  if (photo.category === 'メンテ') return 'メンテナンスの写真を残しました';
+  return '写真を残しました';
+}
+
+// カレンダー・アルバム・ホームを横断する「共通の出来事」アダプター。今日焚いた・薪割り・
+// 薪追加・薪棚チェック・メンテナンスという保存形式の異なるデータを、表示のたびに同じ形へ
+// 正規化するだけで、新しいイベントDBへ書き出したり永続化したりはしない(薄い変換)。
+// 写真は、対応するイベント(その薪棚のその日のチェックなど)のthumbとして優先的に使い、
+// どのイベントとも紐付かなかった写真だけを単独の'photo'イベントとして追加する
+// (同じ写真が二重に出てくることを避けるため)。
+export function buildLivingWithWoodEvents({ shelves, woodAdditions, splitLogs, checks, burnLogs, maintenanceLogs, photos }) {
+  const shelfName = (id) => shelves.find((s) => s.id === id)?.name ?? '薪棚';
+  const events = [];
+  const usedPhotoIds = new Set();
+  const takePhoto = (photoId) => {
+    if (!photoId) return null;
+    const photo = photos.find((p) => p.id === photoId);
+    if (photo) usedPhotoIds.add(photo.id);
+    return photo || null;
+  };
+
+  burnLogs.forEach((b) => {
+    events.push({ date: b.date, type: 'burn', icon: '#i-flame', iconColor: 'var(--ember)', photo: null, shelfId: b.shelfId, text: '今日、火を焚きました' });
+  });
+  woodAdditions.forEach((a) => {
+    events.push({ date: a.date, type: 'addition', icon: '#i-plus', iconColor: 'var(--green)', photo: takePhoto(a.photoId), shelfId: a.shelfId, text: `${shelfName(a.shelfId)}に${a.addedVolumeM3}m³追加` });
+  });
+  splitLogs.forEach((s) => {
+    events.push({ date: s.date, type: 'split', img: 'assets/icon-axe.png', photo: null, shelfId: null, text: s.volumeM3 ? `薪割りをしました(${s.volumeM3}m³)` : '薪割りをしました' });
+  });
+  checks.forEach((c) => {
+    events.push({ date: c.date, type: 'check', icon: '#i-check', photo: null, shelfId: c.shelfId, text: `${shelfName(c.shelfId)}を記録しました` });
+  });
+  maintenanceLogs.forEach((m) => {
+    events.push({ date: m.date, type: 'maintenance', icon: '#i-wrench', photo: takePhoto(m.photoId), shelfId: null, text: `${m.type}をしました` });
+  });
+  // 「薪棚の記録」写真(shelf.photoIds)は、同じ薪棚・同じ日のチェックイベントがあれば
+  // そちらのthumbに添える(その日の記録の一部として見える方が自然なため)。
+  shelves.forEach((s) => {
+    (s.photoIds || []).forEach((pid) => {
+      if (usedPhotoIds.has(pid)) return;
+      const photo = photos.find((p) => p.id === pid);
+      if (!photo) return;
+      const sameDayCheck = events.find((e) => e.type === 'check' && e.shelfId === s.id && e.date === photo.date && !e.photo);
+      if (sameDayCheck) {
+        sameDayCheck.photo = photo;
+        usedPhotoIds.add(pid);
+      }
+    });
+  });
+  // 残った写真(どのイベントとも紐付かなかったもの)は、単独の記録として追加する
+  photos.forEach((p) => {
+    if (usedPhotoIds.has(p.id)) return;
+    events.push({ date: p.date, type: 'photo', icon: '#i-image', photo: p, shelfId: null, text: photoEventText(p) });
+  });
+
+  const typeOrder = { burn: 0, check: 1, addition: 2, split: 3, maintenance: 4, photo: 5 };
+  events.sort((a, b) => (a.date !== b.date ? (a.date < b.date ? 1 : -1) : typeOrder[a.type] - typeOrder[b.type]));
+  return events;
+}
+
 export function stoveYears(purchaseDateIso) {
   if (!purchaseDateIso) return null;
   const days = daysBetween(purchaseDateIso);

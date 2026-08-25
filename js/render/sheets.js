@@ -1,4 +1,4 @@
-import { openOverlay, closeOverlay, showToast, openConfirmSheet } from '../ui.js';
+import { openOverlay, closeOverlay, showToast, openConfirmSheet, go } from '../ui.js';
 import {
   getShelves,
   getShelf,
@@ -24,11 +24,22 @@ import {
   updateCheck,
   deleteCheck,
 } from '../store.js';
-import { applyWoodAddition, todayIso, daysBetween, CHECKLIST_ITEMS, CHECK_STATE_LABELS, nextCheckState } from '../derive.js';
+import {
+  applyWoodAddition,
+  todayIso,
+  daysBetween,
+  CHECKLIST_ITEMS,
+  CHECK_STATE_LABELS,
+  nextCheckState,
+  resolvePhotoShelfId,
+  monthDayLabel,
+} from '../derive.js';
 import { localIsoDate } from '../date-utils.js';
 import { pickImageFile, fileToResizedDataUrl } from '../photos.js';
 import { resolveLocationFromCity, fetchCitiesForPrefecture, PREFECTURES } from '../weather.js';
 import { listRegionsForOffice } from '../jma.js';
+import { state } from '../state.js';
+import { focusOnDate } from './calendar.js';
 
 // ---- 汎用: 写真1枚の登録・差し替えフィールド ----
 // 薪棚・薪ストーブ・メンテ記録など、写真を持つあらゆる記録の編集シートから
@@ -770,12 +781,22 @@ async function shareImageForLookup(uri) {
   }
 }
 
+// 写真をアルバム/カレンダーから見返した時、「この薪棚を見る」「この日の記録を見る」で
+// 写真から薪棚・カレンダーへ自然に行き来できるようにする(薪棚IDの新しい永続フィールドは
+// 増やさず、resolvePhotoShelfIdでその場に逆引きするだけ)。
 export function openPhotoViewSheet(photo, onDeleted) {
   const canShare = typeof navigator.share === 'function';
+  const shelves = getShelves();
+  const shelfId = resolvePhotoShelfId(photo.id, shelves, getWoodAdditions());
+  const shelf = shelfId ? shelves.find((s) => s.id === shelfId) : null;
   const ov = openOverlay(`
     <div class="sheet">
-      <div class="photo-ph" style="height:220px;margin-bottom:10px"><img src="${photo.uri}" alt=""></div>
-      <div class="row" style="margin-bottom:12px"><span class="label-sm">${photo.date}・${photo.category}</span></div>
+      <div class="photo-ph" style="height:240px;margin-bottom:10px"><img src="${photo.uri}" alt=""></div>
+      <div class="row" style="margin-bottom:8px"><span class="label-sm">${monthDayLabel(photo.date)}・${shelf ? shelf.name : photo.category}</span></div>
+      <div class="row" style="margin-bottom:12px;gap:16px;justify-content:flex-start">
+        ${shelf ? `<button class="link-btn" style="padding:0" id="photo-goto-shelf">この薪棚を見る</button>` : ''}
+        <button class="link-btn" style="padding:0" id="photo-goto-day">この日の記録を見る</button>
+      </div>
       ${canShare ? `<button class="btn-ghost" id="photo-share-btn" style="width:100%;margin-bottom:8px">この写真で調べる(樹種など)</button>` : ''}
       <div class="btn-row">
         <button class="btn-ghost" data-action="close-overlay">閉じる</button>
@@ -784,6 +805,16 @@ export function openPhotoViewSheet(photo, onDeleted) {
     </div>
   `);
   ov.querySelector('#photo-share-btn')?.addEventListener('click', () => shareImageForLookup(photo.uri));
+  ov.querySelector('#photo-goto-shelf')?.addEventListener('click', () => {
+    closeOverlay();
+    state.currentShelfId = shelf.id;
+    go('check');
+  });
+  ov.querySelector('#photo-goto-day').addEventListener('click', () => {
+    closeOverlay();
+    go('review');
+    focusOnDate(photo.date);
+  });
   ov.querySelector('#photo-delete-btn').addEventListener('click', () => {
     closeOverlay();
     onDeleted && onDeleted();

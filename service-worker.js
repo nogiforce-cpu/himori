@@ -1,4 +1,4 @@
-const CACHE = 'himori-v47';
+const CACHE = 'himori-v48';
 const ASSETS = [
   './',
   './index.html',
@@ -21,6 +21,7 @@ const ASSETS = [
   './js/render/album.js',
   './js/render/settings.js',
   './js/render/sheets.js',
+  './js/render/event-row.js',
   './js/render/calendar.js',
   './assets/logo-badge.svg',
   './assets/logo-icon-square.svg',

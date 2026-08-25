@@ -10,10 +10,31 @@ import {
   getWeatherHistory,
   getProfile,
 } from '../store.js';
-import { lastBurnDate, todayIso, BURN_CONSUMPTION_M3, overallCheckState } from '../derive.js';
+import {
+  lastBurnDate,
+  todayIso,
+  overallCheckState,
+  buildLivingWithWoodEvents,
+  firstWoodTypeDates,
+} from '../derive.js';
 import { openOverlay } from '../ui.js';
 import { state } from '../state.js';
 import { localIsoDate } from '../date-utils.js';
+import { eventRowHtml } from './event-row.js';
+
+// カレンダー・日別詳細の両方で使う「今の全記録」。呼ぶたびに毎回組み立てる薄い変換で、
+// 新しいイベントDBへ書き出したりはしない(ホームの「薪のある日々」と同じアダプター)。
+function allEvents() {
+  return buildLivingWithWoodEvents({
+    shelves: getShelves(),
+    woodAdditions: getWoodAdditions(),
+    splitLogs: getSplitLogs(),
+    checks: getChecks(),
+    burnLogs: getBurnLogs(),
+    maintenanceLogs: getMaintenanceLogs(),
+    photos: getPhotos(),
+  });
+}
 
 function inMonth(dateIso, year, month) {
   return dateIso.slice(0, 4) === String(year) && Number(dateIso.slice(5, 7)) === month + 1;
@@ -54,9 +75,19 @@ export function render() {
   const weatherByDate = new Map(weatherHistory.map((w) => [w.date, w]));
 
   const allChecks = getChecks();
+  const woodAdditions = getWoodAdditions();
+  const splitLogs = getSplitLogs();
   const burnDates = new Set(burnLogs.map((b) => b.date));
   const maintDates = new Set(maintenanceLogs.map((m) => m.date));
   const photoDates = new Set(photos.map((p) => p.date));
+  // 薪割り・薪追加・薪棚チェックも「同じ暮らしの一部」として見えるよう、まとめて
+  // 1つの小さな緑ドットで示す(焚いた/メンテ/写真と並べて4種もアイコンを増やすと
+  // マスの中が煩雑になるため、種類ごとに分けず「薪仕事をした日」として1つにまとめる)。
+  const workDates = new Set([
+    ...woodAdditions.map((a) => a.date),
+    ...splitLogs.map((s) => s.date),
+    ...allChecks.map((c) => c.date),
+  ]);
   // 「良好」ではなかったチェックの日だけを特別扱いする(良好なチェックは日常の記録なので、
   // マスの中で毎回目立たせる必要はない → タップした日別詳細で見れば十分)。
   // 「要注意」「異常あり」はどちらも良好ではない状態としてまとめてマスの縁で示す。
@@ -81,6 +112,9 @@ export function render() {
     const icons = [];
     if (burnDates.has(dateIso)) {
       icons.push('<svg class="icon ic-burn" viewBox="0 0 24 24"><use href="#i-flame"/></svg>');
+    }
+    if (workDates.has(dateIso)) {
+      icons.push('<svg class="icon ic-work" viewBox="0 0 24 24"><use href="#i-plus"/></svg>');
     }
     if (maintDates.has(dateIso)) {
       icons.push('<svg class="icon ic-maint" viewBox="0 0 24 24"><use href="#i-wrench"/></svg>');
@@ -113,25 +147,30 @@ export function render() {
   }
   document.getElementById('cal-grid').innerHTML = cells.join('');
 
-  // 今月のまとめ(タップしなくても分かる簡易サマリー)
+  // 今月のまとめ: 「回数」ではなく「日数」で数える(同じ日に何度記録しても暮らしの
+  // 実感としては1日分。焚いた日数はホームの「今季◯日、火を焚きました」と考え方を揃える)。
+  // 薪割りと薪追加は「薪づくり」として1つにまとめ、項目を絞って情報過多にしない。
+  // 何も記録が無い月は数字の0を並べず、素直な空状態の一言にする。
   const monthBurns = burnLogs.filter((b) => inMonth(b.date, year, month));
   const monthChecks = getChecks().filter((c) => inMonth(c.date, year, month));
   const monthMaint = maintenanceLogs.filter((m) => inMonth(m.date, year, month));
+  const monthAdditions = getWoodAdditions().filter((a) => inMonth(a.date, year, month));
   const monthSplits = getSplitLogs().filter((s) => inMonth(s.date, year, month));
-  const usedVolume = Math.round(monthBurns.length * BURN_CONSUMPTION_M3 * 100) / 100;
+  const burnDays = new Set(monthBurns.map((b) => b.date)).size;
+  const workDays = new Set([...monthAdditions.map((a) => a.date), ...monthSplits.map((s) => s.date)]).size;
+  const checkDays = new Set(monthChecks.map((c) => c.date)).size;
   const summaryEl = document.getElementById('cal-month-summary');
   if (summaryEl) {
     const summaryIcon = (symbol, extra = '') =>
       `<svg class="icon" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-2px;margin-right:3px${extra}"><use href="${symbol}"/></svg>`;
-    summaryEl.innerHTML = `
-      <div class="label-sm" style="margin-bottom:6px">今月のまとめ</div>
-      <div style="font-size:calc(12px * var(--font-scale));line-height:1.9">
-        ${summaryIcon('#i-flame', ';color:var(--ember)')}焚いた回数 ${monthBurns.length}回(約${usedVolume}m³)<br>
-        ${monthChecks.length > 0 ? `${summaryIcon('#i-check')}薪棚チェック ${monthChecks.length}回<br>` : ''}
-        ${monthMaint.length > 0 ? `${summaryIcon('#i-wrench')}メンテナンス ${monthMaint.length}回<br>` : ''}
-        ${monthSplits.length > 0 ? `<img src="assets/icon-axe.png" alt="" style="width:13px;height:13px;vertical-align:-2px;margin-right:3px;object-fit:contain">薪割り ${monthSplits.length}回` : ''}
-      </div>
-    `;
+    const rows = [];
+    if (burnDays > 0) rows.push(`${summaryIcon('#i-flame', ';color:var(--ember)')}火を焚いた日 ${burnDays}日`);
+    if (workDays > 0) rows.push(`<img src="assets/icon-axe.png" alt="" style="width:13px;height:13px;vertical-align:-2px;margin-right:3px;object-fit:contain">薪づくり ${workDays}日`);
+    if (checkDays > 0) rows.push(`${summaryIcon('#i-check')}薪棚の記録 ${checkDays}日`);
+    if (monthMaint.length > 0) rows.push(`${summaryIcon('#i-wrench')}メンテナンス ${monthMaint.length}回`);
+    summaryEl.innerHTML = rows.length
+      ? `<div class="label-sm" style="margin-bottom:6px">今月のまとめ</div><div style="font-size:calc(12px * var(--font-scale));line-height:1.9">${rows.join('<br>')}</div>`
+      : `<div class="empty" style="padding:6px 4px">まだ記録のない月です。火を焚いたり、薪仕事を記録するとここに残ります。</div>`;
   }
 
   const currentSeason = seasons.find((s) => !s.endDate);
@@ -185,16 +224,48 @@ function lastYearHighlights(dateIso) {
   return highlights;
 }
 
+// その日のイベントに、種類ごとに意味のある補足を1つだけ添える(残量目安・購入先や
+// 価格・メモなど)。「check ID:xxx」のような内部データそのものではなく、既存の履歴表示
+// (旧history-row)が見せていた情報を、event-rowの補足行として引き継ぐだけにとどめる。
+function subLineFor(e, { checks, additions, burns, maint }) {
+  if (e.type === 'check') {
+    const c = checks.find((x) => x.shelfId === e.shelfId);
+    if (!c) return '';
+    const state = overallCheckState(c.items);
+    const label = state === 'good' ? '良好' : state === 'attention' ? '要注意' : '異常あり';
+    return `残り目安${c.remainingPercent}%・${label}`;
+  }
+  if (e.type === 'addition') {
+    const a = additions.find((x) => x.shelfId === e.shelfId);
+    const parts = [];
+    if (a?.source) parts.push(a.source);
+    if (a?.price != null) parts.push(`¥${a.price.toLocaleString()}`);
+    return parts.join('・');
+  }
+  if (e.type === 'burn') {
+    const b = burns.find((x) => x.shelfId === e.shelfId && x.note);
+    return b?.note || '';
+  }
+  if (e.type === 'maintenance') {
+    const m = maint.find((x) => `${x.type}をしました` === e.text);
+    return m?.memo || '';
+  }
+  return '';
+}
+
 export function openCalDay(dateIso) {
-  const shelves = getShelves();
-  const shelfName = (id) => shelves.find((s) => s.id === id)?.name ?? '';
-  const burns = getBurnLogs().filter((b) => b.date === dateIso);
-  const maint = getMaintenanceLogs().filter((m) => m.date === dateIso);
   const checks = getChecks().filter((c) => c.date === dateIso);
   const additions = getWoodAdditions().filter((a) => a.date === dateIso);
-  const photos = getPhotos().filter((p) => p.date === dateIso);
-  const splits = getSplitLogs().filter((s) => s.date === dateIso);
+  const burns = getBurnLogs().filter((b) => b.date === dateIso);
+  const maint = getMaintenanceLogs().filter((m) => m.date === dateIso);
+  const events = allEvents().filter((e) => e.date === dateIso);
   const isChimneyPlan = getProfile()?.nextChimneyCleaning === dateIso;
+  const seasonStart = getSeasons().find((s) => s.startDate === dateIso);
+  const seasonEnd = getSeasons().find((s) => s.endDate === dateIso);
+  const firstWoodType = firstWoodTypeDates(getWoodAdditions(), getPhotos());
+  const newWoodTypeNames = Array.from(firstWoodType.entries())
+    .filter(([, d]) => d === dateIso)
+    .map(([name]) => name);
 
   const sections = [];
   if (isChimneyPlan) {
@@ -202,57 +273,28 @@ export function openCalDay(dateIso) {
       `<div class="banner" style="margin:0 0 10px"><svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px"><use href="#i-wrench"/></svg><span>この日は煙突・触媒清掃の予定日です</span></div>`
     );
   }
-  if (burns.length) {
+  if (seasonStart) {
     sections.push(
-      `<div class="label-sm" style="font-weight:700;margin:10px 0 4px">今日、焚いた</div>` +
-        burns.map((b) => `<div class="history-row"><span>${shelfName(b.shelfId)}</span><span>${b.note || ''}</span></div>`).join('')
+      `<div class="banner" style="margin:0 0 10px"><svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--ember)"><use href="#i-flame"/></svg><span>今季の初焚きです</span></div>`
     );
   }
-  if (checks.length) {
+  if (seasonEnd) {
     sections.push(
-      `<div class="label-sm" style="font-weight:700;margin:10px 0 4px">薪棚チェック</div>` +
-        checks
-          .map((c) => {
-            const state = overallCheckState(c.items);
-            const stateLabel = state === 'good' ? '良好' : state === 'attention' ? '要注意' : '異常あり';
-            return `<div class="history-row"><span>${shelfName(c.shelfId)}</span><span>残量${c.remainingPercent}%・${stateLabel}</span></div>`;
-          })
-          .join('')
+      `<div class="banner" style="margin:0 0 10px"><span>今シーズンを締めた日です</span></div>`
     );
   }
-  if (additions.length) {
+  newWoodTypeNames.forEach((name) => {
     sections.push(
-      `<div class="label-sm" style="font-weight:700;margin:10px 0 4px">薪を追加</div>` +
-        additions
-          .map(
-            (a) =>
-              `<div class="history-row"><span>${shelfName(a.shelfId)}${a.source ? `(${a.source})` : ''}</span><span>+${a.addedVolumeM3}m³${a.price != null ? `・¥${a.price.toLocaleString()}` : ''}</span></div>`
-          )
-          .join('')
+      `<div class="banner" style="margin:0 0 10px"><img src="assets/icon-woodtype.png" alt="" style="width:16px;height:16px;object-fit:contain"><span>${name}という樹種を初めて記録しました</span></div>`
     );
-  }
-  if (splits.length) {
-    sections.push(
-      `<div class="label-sm" style="font-weight:700;margin:10px 0 4px">薪割り</div>` +
-        splits.map((s) => `<div class="history-row"><span>薪割り</span><span>${s.volumeM3 != null ? `${s.volumeM3}m³` : '量は未記録'}</span></div>`).join('')
-    );
-  }
-  if (maint.length) {
-    sections.push(
-      `<div class="label-sm" style="font-weight:700;margin:10px 0 4px">メンテナンス</div>` +
-        maint.map((m) => `<div class="history-row"><span>${m.type}</span><span>${m.memo || ''}</span></div>`).join('')
-    );
-  }
-  if (photos.length) {
-    sections.push(
-      `<div class="label-sm" style="font-weight:700;margin:10px 0 4px">写真</div>` +
-        `<div class="album-grid">${photos.map((p) => `<div class="photo-ph"><img src="${p.uri}" alt=""></div>`).join('')}</div>`
-    );
+  });
+  if (events.length) {
+    sections.push(events.map((e) => eventRowHtml(e, subLineFor(e, { checks, additions, burns, maint }))).join(''));
   }
   const lastYear = lastYearHighlights(dateIso);
   if (lastYear.length) {
     sections.push(
-      `<div class="label-sm" style="font-weight:700;margin:10px 0 4px">去年の今日(${lastYearSameDay(dateIso)})</div>` +
+      `<div class="label-sm" style="font-weight:700;margin:14px 0 4px">去年の今日(${lastYearSameDay(dateIso)})</div>` +
         lastYear.map((h) => `<div class="history-row"><span>${h}</span><span></span></div>`).join('')
     );
   }
@@ -266,4 +308,25 @@ export function openCalDay(dateIso) {
       ${sections.length ? sections.join('') : '<div class="empty">この日の記録はありません。</div>'}
     </div>
   `);
+}
+
+// アルバムの写真から「その日の記録」へ戻れるようにする導線。対象日の月へカレンダーを
+// 合わせ、週次まとめを見ていた場合もカレンダー表示に切り替えてから日別詳細を開く
+// (app.jsのsetReviewViewと同じ表示切り替えだが、循環importを避けるためここで完結させる)。
+export function focusOnDate(dateIso) {
+  const now = new Date();
+  const target = new Date(dateIso + 'T00:00:00');
+  state.calendarMonthOffset = (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth());
+  state.reviewView = 'calendar';
+  const calEl = document.getElementById('review-view-calendar');
+  const weekEl = document.getElementById('review-view-weekly');
+  const titleEl = document.getElementById('review-title');
+  if (calEl) calEl.style.display = '';
+  if (weekEl) weekEl.style.display = 'none';
+  if (titleEl) titleEl.textContent = 'カレンダー';
+  document.querySelectorAll('#review-view-tabs button').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.view === 'calendar');
+  });
+  render();
+  openCalDay(dateIso);
 }
