@@ -6,6 +6,7 @@ import * as album from './render/album.js';
 import * as settings from './render/settings.js';
 import * as calendar from './render/calendar.js';
 import { openAddWoodModal, openAddShelfSheet, openWoodTypeCollectionSheet, openWoodTypeDetailSheet, openStoveDetailSheet, openInfoSheet } from './render/sheets.js';
+import { openSeasonReviewSheet } from './render/season-review.js';
 import { seedIfEmpty, getProfile, getShelves, getNotificationHistory } from './store.js';
 import { ensureWeatherFresh, maybeNotifyWeather, maybeNotifyChimney, maybeNotifyShelfCheck } from './weather.js';
 import { maybeStartOnboarding } from './onboarding.js';
@@ -214,6 +215,7 @@ const ACTIONS = {
   'confirm-season-end': () => home.confirmSeasonEnd(),
   'dismiss-season-end-prompt': () => home.dismissSeasonEndPrompt(),
   'open-cal-day': (el) => calendar.openCalDay(el.dataset.date),
+  'open-season-review': (el) => openSeasonReviewSheet(el.dataset.seasonId),
   'edit-username': () => settings.editUsername(),
   'edit-stove-photo': (el, e) => {
     e.stopPropagation();
@@ -225,6 +227,7 @@ const ACTIONS = {
   'toggle-theme': () => settings.toggleTheme(),
   'cycle-text-size': () => settings.cycleTextSize(),
   'edit-location': () => settings.editLocation(),
+  'edit-amedas-station': () => settings.editAmedasStation(),
   'edit-chimney': () => settings.editChimney(),
   'export-data': () => settings.exportData(),
   'import-data': () => settings.importData(),

@@ -1,4 +1,4 @@
-const CACHE = 'himori-v55';
+const CACHE = 'himori-v56';
 const ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,9 @@ const ASSETS = [
   './js/store.js',
   './js/derive.js',
   './js/weather.js',
+  './js/weather-v2-flag.js',
+  './js/amedas.js',
+  './js/fireSite.js',
   './js/date-utils.js',
   './js/onboarding.js',
   './js/jma.js',
@@ -23,6 +26,7 @@ const ASSETS = [
   './js/render/sheets.js',
   './js/render/event-row.js',
   './js/render/calendar.js',
+  './js/render/season-review.js',
   './assets/logo-badge.svg',
   './assets/logo-icon-square.svg',
   './assets/icon-axe.png',

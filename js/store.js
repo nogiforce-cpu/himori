@@ -63,6 +63,7 @@ function seedIfEmpty() {
     textSize: 'normal',
     postalCode: null,
     location: null,
+    amedasStation: null,
     nextChimneyCleaning: null,
     onboardingCompleted: false,
   };
@@ -87,7 +88,7 @@ function seedIfEmpty() {
 // onboardingCompleted:true をデフォルトにしているのは、既存ユーザー(既にプロフィールが
 // あった=既に使い始めている)には初回セットアップの案内を出さないため。真の初回起動は
 // seedIfEmpty()側でonboardingCompleted:falseを明示的に書き込んでいるので、この関数は通らない。
-const PROFILE_DEFAULTS = { mainShelfId: null, seasonTargetM3: 4.6, onboardingCompleted: true, textSize: 'normal' };
+const PROFILE_DEFAULTS = { mainShelfId: null, seasonTargetM3: 4.6, onboardingCompleted: true, textSize: 'normal', amedasStation: null };
 function migrateProfile(profile) {
   if (!profile) return profile;
   const missingKeys = Object.keys(PROFILE_DEFAULTS).filter((k) => !(k in profile));
@@ -288,6 +289,8 @@ export function getWeatherHistory() {
 // precipCategory(雪/雨の実況種別)は気象庁の発表が解決できた日だけ分かるため、
 // 常にnullを埋めるのではなく分かった時だけ記録する(既存の古い記録にはこの
 // フィールドが無いが、カレンダー側は無いものとして安全にフォールバックする)。
+// stationId/stationName/sourceは気象V2(アメダス実測値)でのみ付与される任意項目。
+// 無くても(=旧来の予報値ベースの記録)壊れないようにする。
 export function recordWeatherHistoryToday(todayWeather) {
   const list = getWeatherHistory();
   const idx = list.findIndex((e) => e.date === todayWeather.date);
@@ -296,6 +299,7 @@ export function recordWeatherHistoryToday(todayWeather) {
     tempMin: Math.round(todayWeather.tempMin),
     tempMax: Math.round(todayWeather.tempMax),
     ...(todayWeather.precipCategory ? { precipCategory: todayWeather.precipCategory } : {}),
+    ...(todayWeather.stationId ? { stationId: todayWeather.stationId, stationName: todayWeather.stationName, source: todayWeather.source } : {}),
   };
   if (idx === -1) list.push(entry);
   else list[idx] = entry;

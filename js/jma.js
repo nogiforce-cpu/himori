@@ -210,3 +210,75 @@ export async function fetchJmaDaily({ officeCode, class10Code, class15Code }) {
 
   return byDate;
 }
+
+// ---- 天気分布予報(5kmメッシュ)の気温グリッド ----
+// 気象庁が発表する天気分布予報のうち、気温(min_temp_point/max_temp_point)だけは
+// 実測値そのままの数値がgeojsonの点群として公式に配信されている(緯度経度+値)。
+// 雨量・天気種別はタイル画像でしか配信されておらず、画像の色から数値を逆算するのは
+// 「発表値の解釈・生成」に当たりかねないため対象外とする(このファイルでは扱わない)。
+// ここで取得した値は、地点予報(fetchJmaDaily)の代表地点の値を上書きするのではなく、
+// 「参考」として並記する用途に限定する。
+async function fetchWdistTargetTimes() {
+  const res = await fetch('https://www.jma.go.jp/bosai/jmatile/data/wdist/targetTimes.json');
+  if (!res.ok) throw new Error('天気分布予報の発表時刻の取得に失敗しました');
+  return res.json();
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const p1 = (lat1 * Math.PI) / 180;
+  const p2 = (lat2 * Math.PI) / 180;
+  const dphi = ((lat2 - lat1) * Math.PI) / 180;
+  const dlmb = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(dphi / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dlmb / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+async function fetchGridLayer(basetime, validtime, elementId) {
+  const url = `https://www.jma.go.jp/bosai/jmatile/data/wdist/${basetime}/none/${validtime}/surf/${elementId}/data.geojson?id=${elementId}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('天気分布予報の取得に失敗しました');
+  return res.json();
+}
+
+// 明日の最高/最低気温(5kmメッシュ・参考値)を、指定した緯度経度に最も近い格子点から取得する。
+// 気象庁の分布予報は「最高気温=翌日09時付近のスロット」「最低気温=翌日00時付近のスロット」
+// にラベル付けされる仕様のため、targetTimesの中からその条件に一致するエントリを探す。
+// 該当が無い(発表タイミング的にまだ翌日分が出ていない等)場合はnullを返し、決して
+// 推測値で埋めない。
+export async function fetchGridMinMaxTemp(lat, lon) {
+  const times = await fetchWdistTargetTimes();
+  if (!times?.length) return null;
+  const basetime = times[0].basetime;
+  const tomorrowIso = localIsoDate(new Date(Date.now() + 86400000)).replaceAll('-', '');
+
+  const maxEntry = times.find((t) => t.validtime.startsWith(tomorrowIso) && t.validtime.slice(8, 10) === '09' && t.elements.includes('max_temp_point'));
+  const minEntry = times.find((t) => t.validtime.startsWith(tomorrowIso) && t.validtime.slice(8, 10) === '00' && t.elements.includes('min_temp_point'));
+  if (!maxEntry && !minEntry) return null;
+
+  const [maxGeo, minGeo] = await Promise.all([
+    maxEntry ? fetchGridLayer(basetime, maxEntry.validtime, 'max_temp_point') : null,
+    minEntry ? fetchGridLayer(basetime, minEntry.validtime, 'min_temp_point') : null,
+  ]);
+
+  const pick = (geo) => {
+    if (!geo?.features?.length) return null;
+    let best = null;
+    let bestDist = Infinity;
+    geo.features.forEach((f) => {
+      const [flon, flat] = f.geometry.coordinates;
+      const d = haversineKm(lat, lon, flat, flon);
+      if (d < bestDist) {
+        bestDist = d;
+        best = Number(f.properties.value);
+      }
+    });
+    return Number.isFinite(best) ? best : null;
+  };
+
+  return {
+    date: localIsoDate(new Date(Date.now() + 86400000)),
+    tempMax: pick(maxGeo),
+    tempMin: pick(minGeo),
+  };
+}

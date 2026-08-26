@@ -6,7 +6,8 @@
 // 精度が「市区町村程度」でしかないなら、入力してもらう情報もその粒度に合わせる方が誠実。
 import { getWeatherCache, setWeatherCache, recordWeatherHistoryToday, updateProfile, addNotificationHistory } from './store.js';
 import { localIsoDate } from './date-utils.js';
-import { resolveJmaArea, fetchJmaDaily } from './jma.js';
+import { resolveJmaArea, fetchJmaDaily, fetchGridMinMaxTemp } from './jma.js';
+import { WEATHER_V2_ENABLED } from './weather-v2-flag.js';
 
 const NOTIFY_FLAG_KEY = 'himori.lastWeatherNotifyDate';
 const CHIMNEY_FLAG_KEY = 'himori.lastChimneyNotifyDate';
@@ -101,10 +102,79 @@ async function overlayJmaOfficial(daily, jmaArea) {
   return daily;
 }
 
+// ---- 気象V2: 気象庁の地点予報だけで日別データを組み立てる(Open-Meteoを一切使わない) ----
+// WEATHER_V2_ENABLED時のみ使用。fetchJmaDaily(気象庁の公式発表そのもの)にある日付だけを
+// 採用し、値が無い日は埋めずに省く(推測で穴埋めしない)。windSpeedMax/humidityMean/
+// precipitationSumはOpen-Meteo由来だったフィールドのため、V2では出力しない
+// (乾燥日数の推定機能はcheck.js側でこれらの不在を検知して非表示にする)。
+async function fetchDailyForecastV2(location) {
+  if (!location?.jma?.officeCode) return [];
+  const byDate = await fetchJmaDaily(location.jma);
+  const todayIso = localIsoDate();
+  return Array.from(byDate.entries())
+    .filter(([date]) => date >= todayIso)
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([date, v]) => ({
+      date,
+      tempMin: v.tempMin ?? null,
+      tempMax: v.tempMax ?? null,
+      precipitationProbability: v.precipitationProbability ?? null,
+      weatherText: v.weatherText ?? null,
+      precipCategory: v.precipCategory ?? null,
+    }));
+}
+
+// 気象庁の予報文(weatherText)から「雪」「雨」「雨または雪」を判定する。既存のprecipCategory
+// (fetchJmaDailyが既に'snow'/'rain'に単純化した値)は、雪と雨が両方含まれる文でも
+// 'snow'に丸めてしまう(判定の都合上の内部値であり、雪を優先して危険側に倒すための単純化)。
+// ホームの表示文言では気象庁の言い回しを保つ必要があるため、weatherTextを直接見て
+// 「雨または雪」を勝手に「雪」に変更しないようにする。
+function officialPrecipKind(weatherText) {
+  if (!weatherText) return null;
+  const hasSnow = weatherText.includes('雪');
+  const hasRain = weatherText.includes('雨');
+  if (hasSnow && hasRain) return 'mixed';
+  if (hasSnow) return 'snow';
+  if (hasRain) return 'rain';
+  return null;
+}
+
+// 「行動に繋がる雨」の閾値として降水確率を採用する。
+// 検証の結果、気象庁の地点予報・5kmメッシュ分布予報のどちらにも構造化された
+// 降水量(mm)の公式値は存在しない(分布予報の降水量レイヤーは色分け画像のみで、
+// 画像から数値を逆算するのは発表値の解釈・生成になりかねないため採用しない)。
+// 代わりに、気象庁が10%刻みで発表する「降水確率」をそのまま閾値判定に使う。
+// 70%はJMA自身が「傘の必要性が高い」目安として一般に使う水準で、通常の夕立程度の
+// 予報(30〜50%程度で出ることが多い)を除外しつつ、行動に値する雨だけを拾える。
+const MEANINGFUL_RAIN_POP = 70;
+
+// ホームに出す気象カードを1枚だけ決める(雪>雨または雪>意味のある雨>低温のみ、の優先順位)。
+// 低温は雪・雨のカードがあればそのカードに補助行として同居させ、単独では出さない
+// (同じような内容のカードを2枚出さないため)。すべて気象庁の公式値をそのまま使い、
+// 「氷点下」「強い冷え込み」等のHIMORI独自ラベルは付けない。
+export function officialWeatherCard(dailyWeather) {
+  if (!dailyWeather || dailyWeather.length < 2) return null;
+  const tomorrow = dailyWeather[1];
+  if (!tomorrow) return null;
+  const kind = officialPrecipKind(tomorrow.weatherText);
+  const coldTrigger = tomorrow.tempMin != null && tomorrow.tempMin <= 5;
+
+  if (kind === 'snow' || kind === 'mixed') {
+    return { kind, date: tomorrow.date, tempMin: tomorrow.tempMin, showCold: coldTrigger };
+  }
+  if (kind === 'rain' && tomorrow.precipitationProbability != null && tomorrow.precipitationProbability >= MEANINGFUL_RAIN_POP) {
+    return { kind: 'rain', date: tomorrow.date, precipitationProbability: tomorrow.precipitationProbability, tempMin: tomorrow.tempMin, showCold: coldTrigger };
+  }
+  if (coldTrigger) {
+    return { kind: 'cold', date: tomorrow.date, tempMin: tomorrow.tempMin, showCold: true };
+  }
+  return null;
+}
+
 // キャッシュの構造が変わった時(取得するフィールドを増やした等)に、日付だけ見て
 // 「新鮮」と誤判定して古い形のデータを使い続けないようにするためのバージョン番号。
 // フィールドを追加・変更したらこの数字を上げる。
-const CACHE_VERSION = 8;
+const CACHE_VERSION = 9;
 
 // 予報モデルは1日に何度も更新されるため、1日1回しか取り直さないと夜には朝の古い
 // 予報のまま(実際の気温とズレて見える)になってしまう。数時間おきに取り直す。
@@ -138,16 +208,49 @@ export async function ensureWeatherFresh(profile) {
         updateProfile({ location });
       }
     }
-    const daily = await fetchDailyForecast(location.lat, location.lon);
-    await overlayJmaOfficial(daily, location.jma);
-    const next = { version: CACHE_VERSION, fetchedAt: new Date().toISOString(), location, daily };
+    let daily;
+    let gridTemp = null;
+    if (WEATHER_V2_ENABLED) {
+      daily = await fetchDailyForecastV2(location);
+      // 5kmメッシュの気温は参考表示用の補助情報(取得できなくても致命的ではないため
+      // 個別にcatchし、失敗しても地点予報側の表示には影響させない)
+      gridTemp = await fetchGridMinMaxTemp(location.lat, location.lon).catch(() => null);
+      await ensureAmedasHistoryFresh(profile).catch(() => null);
+    } else {
+      daily = await fetchDailyForecast(location.lat, location.lon);
+      await overlayJmaOfficial(daily, location.jma);
+    }
+    const next = { version: CACHE_VERSION, fetchedAt: new Date().toISOString(), location, daily, gridTemp };
     setWeatherCache(next);
-    // 今日時点の実際の気温を積み上げて記録しておく(カレンダーで「この日は焚いていない/焚いた」を
-    // 実際の気温と一緒に振り返れるようにするため。過去分は遡れないが、今日から蓄積を始める)
-    if (daily[0]) recordWeatherHistoryToday(daily[0]);
+    // 気象V2では「予報値を実績として保存しない」という方針のため、weatherHistoryへの
+    // 積み上げはアメダス観測点(実測値)経由でのみ行う(下のensureAmedasHistoryFresh)。
+    // V1(旧経路)は従来通り、当日分の予報値をそのまま実績として積み上げる。
+    if (!WEATHER_V2_ENABLED && daily[0]) recordWeatherHistoryToday(daily[0]);
     return next;
   } catch {
     return cache; // ネットワーク不通時は古いキャッシュ(あれば)のまま静かに継続
+  }
+}
+
+// 気象V2の「過去の気温記録」: 選択済みのアメダス観測点の実測値を取得してweatherHistoryに
+// 積み上げる(予報値を実績として保存しない、という方針のため)。呼び出し側(ensureWeatherFresh)
+// が既に3時間おきの再取得間隔を管理しているため、ここでは追加のレート制限はしない
+// (1日の最低気温は日中を通して更新されうるため、朝1回だけの記録では確定しない)。
+// 観測点が未設定の場合は何もしない(現状の「地点未設定なら記録しない」動作を踏襲)。
+export async function ensureAmedasHistoryFresh(profile) {
+  if (!WEATHER_V2_ENABLED || !profile?.amedasStation) return;
+  try {
+    const { fetchAmedasTodaySummary } = await import('./amedas.js');
+    const summary = await fetchAmedasTodaySummary(profile.amedasStation.id);
+    if (!summary) return;
+    recordWeatherHistoryToday({
+      ...summary,
+      stationId: profile.amedasStation.id,
+      stationName: profile.amedasStation.name,
+      source: 'amedas',
+    });
+  } catch {
+    // オフライン等は静かに諦める(次回起動時に再試行される)
   }
 }
 
@@ -181,18 +284,23 @@ export function has48hAlert(dailyWeather) {
 export function factualTodayNote(dailyWeather) {
   if (!dailyWeather || !dailyWeather.length) return null;
   const today = dailyWeather[0];
+  // 気象庁の発表タイミング・端末の時計のずれ等で当日分の気温がまだ発表されていない
+  // ことがある(null)。Math.round(null)は0を返してしまい「0℃」という架空の値に
+  // 見えてしまうため、値が無い時は何も表示しない(無理に埋めない)。
+  if (today.tempMin == null) return null;
   const temp = Math.round(today.tempMin);
   if (temp <= 3) return `予想最低気温 ${temp}℃(乾いた薪は割れやすくなる目安)`;
   return `予想最低気温 ${temp}℃`;
 }
 
 // ホームの数日天気ストリップ用(最大5日分)。薪の運び出し・薪割り・使用の計画に使える事実だけを渡す
+// 気温が未発表(null)の日は、0℃などの架空の値に丸めず、そのままnullとして呼び出し側に渡す。
 export function upcomingDaysSummary(dailyWeather, days = 5) {
   if (!dailyWeather || !dailyWeather.length) return [];
   return dailyWeather.slice(0, days).map((d) => ({
     date: d.date,
-    tempMin: Math.round(d.tempMin),
-    tempMax: Math.round(d.tempMax),
+    tempMin: d.tempMin == null ? null : Math.round(d.tempMin),
+    tempMax: d.tempMax == null ? null : Math.round(d.tempMax),
     precipitationSum: d.precipitationSum,
     precipitationProbability: d.precipitationProbability,
     precipCategory: d.precipCategory ?? null,
@@ -221,13 +329,33 @@ function showLocalNotification(title, body) {
   }
 }
 
-// 天気起因の通知は「48時間以内に冷え込み/雨/雪」の1種類、1日1回だけ
+// 天気起因の通知は、ホームに表示されるカードと同じ条件・同じ1件だけ、1日1回。
+// (V1はprecipitationSum(Open-Meteo由来)を使うupcoming48hRisk、V2はofficialWeatherCard
+// を使う。ホーム画面の表示条件とズレると「通知は来たのにホームには何も出ていない」
+// といった不整合が起きるため、ホームと同じ判定関数をそのまま使う)
 export function maybeNotifyWeather(dailyWeather, enabled) {
   if (!enabled) return;
-  if (!has48hAlert(dailyWeather)) return;
-  const last = localStorage.getItem(NOTIFY_FLAG_KEY);
   const today = todayFlagIso();
+  const last = localStorage.getItem(NOTIFY_FLAG_KEY);
   if (last === today) return;
+
+  if (WEATHER_V2_ENABLED) {
+    const card = officialWeatherCard(dailyWeather);
+    if (!card) return;
+    const text =
+      card.kind === 'snow'
+        ? '明日は雪の予報です。薪を少し取り込んでおくと安心です。'
+        : card.kind === 'mixed'
+          ? '明日は雨または雪の予報です。外の薪は、少し取り込んでおくと安心です。'
+          : card.kind === 'rain'
+            ? '明日は雨の予報です。外の薪は、早めに取り込んでおくと安心です。'
+            : `明日の最低気温 ${Math.round(card.tempMin)}℃です。使う薪を少し準備しておいてもよさそうです。`;
+    showLocalNotification('火守 / HIMORI', text);
+    localStorage.setItem(NOTIFY_FLAG_KEY, today);
+    return;
+  }
+
+  if (!has48hAlert(dailyWeather)) return;
   showLocalNotification('火守 / HIMORI', '48時間以内に冷え込み・雨・雪の予報があります。多めに運んでおくと安心です。');
   localStorage.setItem(NOTIFY_FLAG_KEY, today);
 }

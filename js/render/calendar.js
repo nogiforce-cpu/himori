@@ -16,7 +16,6 @@ import {
   overallCheckState,
   buildLivingWithWoodEvents,
   firstWoodTypeDates,
-  COLD_SNAP_THRESHOLD,
 } from '../derive.js';
 import { openOverlay } from '../ui.js';
 import { state } from '../state.js';
@@ -87,11 +86,13 @@ export function render() {
   const woodworkDates = new Set([...woodAdditions.map((a) => a.date), ...splitLogs.map((s) => s.date)]);
   const shelfCheckDates = new Set(allChecks.map((c) => c.date));
   // 気温バッジ(毎日の数字)は出来事より目立ってしまうため廃止し、代わりに「季節の気配」
-  // だけを控えめな雪の結晶アイコンで示す: 実際に雪が観測された日、または強い冷え込み
-  // (最低気温-5℃以下)の日だけを対象にする(気象庁の実況が解決できた日のみ記録されるため、
-  // 全ての日を遡って判定できるわけではない)。
+  // だけを控えめな雪の結晶アイコンで示す: 実際に雪が観測された日、または最低気温が
+  // 氷点下(0℃未満)だった日だけを対象にする(気象庁の実況が解決できた日のみ記録されるため、
+  // 全ての日を遡って判定できるわけではない)。以前は独自の「強い冷え込み(-5℃以下)」という
+  // HIMORI発のしきい値を使っていたが、気象庁発表値をそのまま扱う方針と矛盾するため、
+  // 誰にとっても同じ意味を持つ客観的な基準(氷点下=0℃未満)に変更した。
   const snowDates = new Set(
-    weatherHistory.filter((w) => w.precipCategory === 'snow' || w.tempMin <= COLD_SNAP_THRESHOLD).map((w) => w.date)
+    weatherHistory.filter((w) => w.precipCategory === 'snow' || w.tempMin < 0).map((w) => w.date)
   );
   // 「良好」ではなかったチェックの日だけを特別扱いする(良好なチェックは日常の記録なので、
   // マスの中で毎回目立たせる必要はない → タップした日別詳細で見れば十分)。
@@ -212,7 +213,7 @@ export function render() {
     seasonNoteEl.textContent = `今シーズン開始: ${currentSeason.startDate}${lastBurn ? `・最後に焚いた日: ${lastBurn}(「終」マークは終了日)` : ''}`;
   } else if (seasons.length) {
     const last = seasons[seasons.length - 1];
-    seasonNoteEl.textContent = `前シーズン: ${last.startDate} 〜 ${last.endDate}`;
+    seasonNoteEl.innerHTML = `<span>前シーズン: ${last.startDate} 〜 ${last.endDate}</span> <button class="link-btn" style="padding:0" data-action="open-season-review" data-season-id="${last.id}">この冬の記録を見る</button>`;
   } else {
     seasonNoteEl.textContent = '';
   }
@@ -252,33 +253,21 @@ function dateHeadingLabel(dateIso) {
 
 // その日が「季節の気配」として記憶に残りそうな気象だったかを、既存のweatherHistory
 // (実際に記録された最低気温・分かる範囲の降水種別)だけから判定する。新しい天気APIや
-// 複雑な予測は使わず、安全に分かる範囲だけを扱う。cycleStartは「今季」の起点
-// (前シーズン終了日。無ければ全期間)で、home.js等と同じ考え方を流用している。
-// 節目が重なった日でも文章を並べすぎないよう、最も意味の強いものだけを選ぶ。
-// 優先順位: 雪(初雪>雪の日) > 強い冷え込み(-5℃以下、毎回) > 今季初の氷点下 > 今季初の
-// 10℃未満。「一桁」という表現は日本語として不自然なので使わず、「10℃を下回りました」
-// 「氷点下になりました」という具体的な言い方に統一する。
-function weatherMilestoneNote(dateIso, weatherHistory, cycleStart) {
+// この日の最低気温を、公式の数値そのまま・出典付きで一行だけ示す。以前は
+// 「冷え込みの強い一日でした」「今季初めて、氷点下になりました」等の文章で節目として
+// 演出していたが、これはHIMORI側が気温に「強い/初めて」という意味づけ・評価を加える
+// ことになり、気象庁発表値をそのまま扱う今回の方針と矛盾するため、即物的な数値表示に
+// 統一した(出来事(節目)ではなく、あくまで参考情報としての位置付け)。
+// stationNameが無い記録(気象V2以前に保存された、予報値ベースの古い記録)は、
+// 特定の観測点を名乗らず「気象庁の発表に基づく記録」という控えめな表記にとどめる。
+function weatherFactLine(dateIso, weatherHistory) {
   const entry = weatherHistory.find((w) => w.date === dateIso);
-  if (!entry) return null;
-  const inCycle = (d) => !cycleStart || d > cycleStart;
-  const priorInCycle = weatherHistory.filter((w) => w.date < dateIso && inCycle(w.date));
-  const coldSuffix = entry.tempMin <= COLD_SNAP_THRESHOLD ? `(最低${entry.tempMin}℃)` : '';
-
-  if (entry.precipCategory === 'snow') {
-    const hadSnowBefore = priorInCycle.some((w) => w.precipCategory === 'snow');
-    return (hadSnowBefore ? '雪の日でした' : '今季初めて雪が降りました') + coldSuffix + '。';
+  if (!entry || entry.tempMin == null) return null;
+  if (entry.stationId) {
+    const url = `https://www.jma.go.jp/bosai/amedas/#area_type=offices&amdno=${entry.stationId}&format=table1h`;
+    return `この日の最低気温 ${entry.tempMin}℃(<a href="${url}" target="_blank" rel="noopener">${entry.stationName}観測所・気象庁 ↗</a>)`;
   }
-  if (entry.tempMin <= COLD_SNAP_THRESHOLD) {
-    return `冷え込みの強い一日でした(最低${entry.tempMin}℃)。`;
-  }
-  if (entry.tempMin < 0 && !priorInCycle.some((w) => w.tempMin < 0)) {
-    return '今季初めて、氷点下になりました。';
-  }
-  if (entry.tempMin < 10 && !priorInCycle.some((w) => w.tempMin < 10)) {
-    return '今季初めて、最低気温が10℃を下回りました。';
-  }
-  return null;
+  return `この日の最低気温 ${entry.tempMin}℃(気象庁の発表に基づく記録)`;
 }
 
 // 同じ日に同じ種類の記録(特に「今日、焚いた」や同じ種類のメンテ)が複数あると、実データ
@@ -364,8 +353,7 @@ export function openCalDay(dateIso) {
   const newWoodTypeNames = Array.from(firstWoodType.entries())
     .filter(([, d]) => d === dateIso)
     .map(([name]) => name);
-  const cycleStart = seasons.filter((s) => s.endDate).slice(-1)[0]?.endDate ?? null;
-  const weatherNote = weatherMilestoneNote(dateIso, getWeatherHistory(), cycleStart);
+  const weatherNote = weatherFactLine(dateIso, getWeatherHistory());
 
   // その日の「節目」をまとめて1箇所に集約する(以前は初焚き・シーズン締め・初めての樹種が
   // それぞれ別のバナー枠で浮いて見えていた)。実績と紐づく節目は控えめな行として、

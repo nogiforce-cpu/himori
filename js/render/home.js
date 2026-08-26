@@ -40,7 +40,8 @@ import {
   COLD_SNAP_THRESHOLD,
   BURN_CONSUMPTION_M3,
 } from '../derive.js';
-import { upcoming48hRisk, upcomingDaysSummary } from '../weather.js';
+import { upcoming48hRisk, upcomingDaysSummary, officialWeatherCard } from '../weather.js';
+import { WEATHER_V2_ENABLED } from '../weather-v2-flag.js';
 import { showToast, go, openOverlay, closeOverlay } from '../ui.js';
 import { openSenseNoteSheet, openShelfPickerSheet, openPhotoViewSheet, openSplitLogSheet } from './sheets.js';
 import { eventRowHtml } from './event-row.js';
@@ -72,7 +73,13 @@ function weatherStripHtml(weather) {
           : d.precipCategory === 'rain'
             ? `<div class="p"><svg class="icon" viewBox="0 0 24 24" style="width:11px;height:11px;color:var(--rain)"><use href="#i-drop"/></svg>雨</div>`
             : '';
-      return `<div class="day"><div class="d">${label}</div><div class="t"><span class="t-max">${d.tempMax}</span><span class="t-min">${d.tempMin}</span>℃</div>${precipBadge}</div>`;
+      // 気象庁がまだその日の気温を発表していない(null)ことがある。0℃などの架空の
+      // 値に見えないよう、未発表の時は「―」とだけ表示する。
+      const tempHtml =
+        d.tempMax == null && d.tempMin == null
+          ? '<span class="t-min">―</span>'
+          : `<span class="t-max">${d.tempMax ?? '―'}</span><span class="t-min">${d.tempMin ?? '―'}</span>℃`;
+      return `<div class="day"><div class="d">${label}</div><div class="t">${tempHtml}</div>${precipBadge}</div>`;
     })
     .join('');
 }
@@ -81,28 +88,87 @@ function weatherStripHtml(weather) {
 // それは不具合ではなく「参照元が違う」ためだと分かるようにするための表示。
 // 気象庁の発表区分が特定できている場合は、その地域の公式予報ページへのリンクも添える
 // (迷った時に一次情報へすぐ確認しに行けるように)。
+// 市区町村(class20)まで特定できていれば、その市区町村のページに直接リンクする
+// (気象庁の発表区分そのものは県全体のことが多いが、サイト側は市区町村単位で
+// ページが分かれており、該当ページを開くと自動でその地域の情報が選択された状態になる)。
+function jmaForecastUrl(weather) {
+  const jma = weather?.location?.jma;
+  if (!jma) return null;
+  return jma.class20Code
+    ? `https://www.jma.go.jp/bosai/forecast/#area_type=class20s&area_code=${jma.class20Code}`
+    : jma.officeCode
+      ? `https://www.jma.go.jp/bosai/forecast/#area_type=offices&area_code=${jma.officeCode}`
+      : null;
+}
+
 function weatherSourceHtml(weather) {
   if (!weather) return '';
   const jma = weather.location?.jma;
   const officeCode = jma?.officeCode;
-  // 市区町村(class20)まで特定できていれば、その市区町村のページに直接リンクする
-  // (気象庁の発表区分そのものは県全体のことが多いが、サイト側は市区町村単位で
-  // ページが分かれており、該当ページを開くと自動でその地域の情報が選択された状態になる)。
-  const jmaUrl = jma?.class20Code
-    ? `https://www.jma.go.jp/bosai/forecast/#area_type=class20s&area_code=${jma.class20Code}`
-    : officeCode
-      ? `https://www.jma.go.jp/bosai/forecast/#area_type=offices&area_code=${officeCode}`
-      : null;
+  const jmaUrl = jmaForecastUrl(weather);
   // 「南部」だけだとどこの南部か分からないため、必ず都道府県名を前に付ける。
   const regionLabel = weather.location?.prefecture ? `${weather.location.prefecture}${jma?.regionName}` : jma?.regionName;
-  const label = officeCode
-    ? `気象庁「${regionLabel}」の発表値(降水確率・最高/最低気温)。当日の最低気温のみ数値予報モデルの推定値。数時間ごとに更新。地域が体感と違う場合は設定から変更できます`
-    : '数値予報モデル(Open-Meteo)による推定値を表示。数時間ごとに更新';
+  const label = WEATHER_V2_ENABLED
+    ? officeCode
+      ? `気象庁「${regionLabel}」の発表値(降水確率・最高/最低気温)をそのまま表示。数時間ごとに更新。地域が体感と違う場合は設定から変更できます`
+      : '火のある場所が未設定です'
+    : officeCode
+      ? `気象庁「${regionLabel}」の発表値(降水確率・最高/最低気温)。当日の最低気温のみ数値予報モデルの推定値。数時間ごとに更新。地域が体感と違う場合は設定から変更できます`
+      : '数値予報モデル(Open-Meteo)による推定値を表示。数時間ごとに更新';
   return `
     <div class="label-sm" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
       <span>${label}</span>
       ${jmaUrl ? `<a href="${jmaUrl}" target="_blank" rel="noopener" class="link-btn" style="padding:0;white-space:nowrap">気象庁の予報を見る</a>` : ''}
     </div>`;
+}
+
+// 気象V2: 「雪」「最低気温5℃以下」「意味のある雨(降水確率70%以上)」のいずれかに
+// 該当する時だけ、公式の数値・文言をそのまま使ったカードを1枚だけ出す(通常の晴れ・
+// 曇り・普通の雨・毎日の気温一覧は出さない)。「氷点下」「強い冷え込み」等のHIMORI
+// 独自ラベルは付けず、気象庁発表の数値をそのまま見せる。
+function officialWeatherCardHtml(weather) {
+  const card = officialWeatherCard(weather?.daily);
+  if (!card) return '';
+  const jmaUrl = jmaForecastUrl(weather);
+  const jmaLink = jmaUrl ? `<a href="${jmaUrl}" target="_blank" rel="noopener" class="link-btn" style="padding:0">気象庁発表 ↗</a>` : '<span class="label-sm">気象庁発表</span>';
+
+  let mainText;
+  let icon;
+  let advice;
+  if (card.kind === 'snow') {
+    mainText = '明日は雪の予報です。';
+    icon = 'i-snow';
+    advice = '薪を少し取り込んでおくと安心です。';
+  } else if (card.kind === 'mixed') {
+    mainText = '明日は雨または雪の予報です。';
+    icon = 'i-snow';
+    advice = '外の薪は、少し取り込んでおくと安心です。';
+  } else if (card.kind === 'rain') {
+    mainText = '明日は雨の予報です。';
+    icon = 'i-drop';
+    advice = '外の薪は、早めに取り込んでおくと安心です。';
+  } else {
+    mainText = `明日の最低気温 ${Math.round(card.tempMin)}℃`;
+    icon = 'i-drop';
+    advice = '使う薪を少し準備しておいてもよさそうです。';
+  }
+  // 雪・雨のカードに低温も該当する場合、別カードを重ねず同じカードに補助行として同居させる
+  // (同じような内容のカードが2枚並ばないようにするため)。
+  const coldSubline = card.kind !== 'cold' && card.showCold ? `<div class="label-sm" style="margin-top:2px">明日の最低気温 ${Math.round(card.tempMin)}℃</div>` : '';
+  const rainProbLine = card.kind === 'rain' && card.precipitationProbability != null ? `<div class="label-sm" style="margin-top:2px">予想降水確率 ${card.precipitationProbability}%</div>` : '';
+
+  return `
+    <div class="banner">
+      <svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px"><use href="#${icon}"/></svg>
+      <div style="flex:1">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+          <span>${mainText}</span>${jmaLink}
+        </div>
+        ${rainProbLine}${coldSubline}
+        <div style="margin-top:4px">${advice}</div>
+      </div>
+    </div>
+  `;
 }
 
 // ホーム下部の天気は「天気予報を表示する」のではなく「火の季節が近づく気配を一言だけ
@@ -431,21 +497,28 @@ export function render() {
   // 「雪」と言ってしまうような季節外れな文言にならないようにする。
   const phase = seasonPhase();
   if (weather && phase !== 'off') {
-    const risk = upcoming48hRisk(weather.daily);
-    if (risk) {
-      // 気象庁の天気文から実際に「雪」と分かる場合は、あいまいな「雨・雪」ではなく
-      // はっきり雪と伝える(薪ストーブと雪は相性が良いので、ワクワクできる情報でもある)。
-      const text = risk.snow
-        ? '48時間以内に雪の予報があります。多めに運んでおくと安心です。'
-        : risk.cold && risk.rain
-          ? '48時間以内に冷え込みと雨の予報があります。多めに運んでおくと安心です。'
-          : risk.cold
-            ? '48時間以内に冷え込みの予報があります。多めに運んでおくと安心です。'
-            : '48時間以内にまとまった雨の予報があります。濡れる前に多めに運んでおくと安心です。';
-      const icon = risk.snow ? 'i-snow' : 'i-drop';
-      banners.push(
-        `<div class="banner"><svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px"><use href="#${icon}"/></svg><span>${text}</span></div>`
-      );
+    if (WEATHER_V2_ENABLED) {
+      // 気象V2: 気象庁の公式値のみを使うofficialWeatherCardに一本化(下のweatherContextLine
+      // 相当の内容もこのカードに統合されるため、V2では別途重ねて出さない)。
+      const cardHtml = officialWeatherCardHtml(weather);
+      if (cardHtml) banners.push(cardHtml);
+    } else {
+      const risk = upcoming48hRisk(weather.daily);
+      if (risk) {
+        // 気象庁の天気文から実際に「雪」と分かる場合は、あいまいな「雨・雪」ではなく
+        // はっきり雪と伝える(薪ストーブと雪は相性が良いので、ワクワクできる情報でもある)。
+        const text = risk.snow
+          ? '48時間以内に雪の予報があります。多めに運んでおくと安心です。'
+          : risk.cold && risk.rain
+            ? '48時間以内に冷え込みと雨の予報があります。多めに運んでおくと安心です。'
+            : risk.cold
+              ? '48時間以内に冷え込みの予報があります。多めに運んでおくと安心です。'
+              : '48時間以内にまとまった雨の予報があります。濡れる前に多めに運んでおくと安心です。';
+        const icon = risk.snow ? 'i-snow' : 'i-drop';
+        banners.push(
+          `<div class="banner"><svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px"><use href="#${icon}"/></svg><span>${text}</span></div>`
+        );
+      }
     }
   }
   bannerEl.innerHTML = banners.join('');
@@ -518,7 +591,9 @@ export function render() {
   // 詳細情報(第5階層): 薪ストーブ生活の文脈での短い一言だけを常時表示し、
   // 数日分の予報・出典は「詳しい天気を見る」の折りたたみに格納する
   const weatherContextEl = document.getElementById('home-weather-context');
-  const context = weatherContextLine(weather, phase);
+  // 気象V2では同じ内容が上のofficialWeatherCard(バナー)に統合済みのため、
+  // ここで重ねて表示しない(V1のみ、独自の-5℃しきい値による季節感の一言を出す)。
+  const context = WEATHER_V2_ENABLED ? null : weatherContextLine(weather, phase);
   weatherContextEl.innerHTML = context
     ? `${context.snow ? '<svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;color:var(--rain);vertical-align:-1px;margin-right:4px"><use href="#i-snow"/></svg>' : ''}${context.text}`
     : '';

@@ -5,6 +5,8 @@ import { getProfile, updateProfile, loadDemoSeason } from './store.js';
 import { openOverlay, closeOverlay } from './ui.js';
 import { resolveLocationFromCity, requestNotificationPermission } from './weather.js';
 import { locationPickerFieldsHtml, wireLocationPicker } from './render/sheets.js';
+import { lookupAddressCandidates, resolveFireSite } from './fireSite.js';
+import { WEATHER_V2_ENABLED } from './weather-v2-flag.js';
 
 function shell({ step, total, title, body, contentHtml, primaryLabel, secondaryLabel }) {
   const dots = Array.from({ length: total }, (_, i) => `<span class="ob-dot${i === step - 1 ? ' on' : ''}"></span>`).join('');
@@ -111,6 +113,10 @@ function showStove(onDone, offset = 0) {
 }
 
 function showPostal(onDone, offset = 0) {
+  if (WEATHER_V2_ENABLED) {
+    showFireSite(onDone, offset);
+    return;
+  }
   const ov = shell({
     step: 4 + offset,
     total: 6 + offset,
@@ -135,6 +141,57 @@ function showPostal(onDone, offset = 0) {
       showNotifications(onDone, offset);
     } catch (e) {
       errEl.textContent = e.message || '登録に失敗しました';
+    }
+  });
+  ov.querySelector('#ob-secondary').addEventListener('click', () => showNotifications(onDone, offset));
+}
+
+// 気象V2: 「火のある場所」を郵便番号から登録する(現在地は使わない)。アメダス観測点の
+// 選択はここでは行わず、設定画面の「季節の記録に使う観測点」から任意のタイミングで
+// 行える(オンボーディングを長くしすぎないため。未設定の間は設定画面に「未設定」と
+// はっきり表示されるので、選び忘れたまま気づかない状態にはならない)。
+function showFireSite(onDone, offset = 0) {
+  const ov = shell({
+    step: 4 + offset,
+    total: 6 + offset,
+    title: '火のある場所を教えてください',
+    body: '薪ストーブが設置されている場所の郵便番号を入力してください。現在地(スマートフォンの位置情報)は使いません。番地までは特定しません。',
+    contentHtml: `
+      <div class="field">
+        <label>郵便番号</label>
+        <input class="box" id="ob-postal-code" placeholder="7291404" inputmode="numeric" maxlength="8">
+      </div>
+      <div id="ob-postal-error" style="font-size:calc(11px * var(--font-scale));color:var(--red);margin-bottom:4px"></div>
+      <div id="ob-postal-candidates"></div>
+    `,
+    primaryLabel: '住所を探す',
+    secondaryLabel: 'あとで',
+  });
+  ov.querySelector('#ob-primary').addEventListener('click', async () => {
+    const postal = ov.querySelector('#ob-postal-code').value;
+    const errEl = ov.querySelector('#ob-postal-error');
+    const candEl = ov.querySelector('#ob-postal-candidates');
+    errEl.textContent = '';
+    try {
+      const candidates = await lookupAddressCandidates(postal);
+      candEl.innerHTML = candidates
+        .map(
+          (c, i) => `
+        <div class="card" style="margin-bottom:8px">
+          <div style="font-weight:700">${c.prefecture}${c.city}${c.town}</div>
+          <button class="btn-primary" style="width:100%;margin-top:8px" data-action="ob-fs-confirm" data-idx="${i}">この地域を火のある場所にする</button>
+        </div>`
+        )
+        .join('');
+      candEl.querySelectorAll('[data-action="ob-fs-confirm"]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const location = await resolveFireSite(candidates[Number(btn.dataset.idx)]);
+          updateProfile({ location });
+          showNotifications(onDone, offset);
+        });
+      });
+    } catch (e) {
+      errEl.textContent = e.message || '住所の取得に失敗しました';
     }
   });
   ov.querySelector('#ob-secondary').addEventListener('click', () => showNotifications(onDone, offset));

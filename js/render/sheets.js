@@ -46,6 +46,9 @@ import { localIsoDate } from '../date-utils.js';
 import { pickImageFile, fileToResizedDataUrl } from '../photos.js';
 import { resolveLocationFromCity, fetchCitiesForPrefecture, PREFECTURES } from '../weather.js';
 import { listRegionsForOffice } from '../jma.js';
+import { lookupAddressCandidates, resolveFireSite } from '../fireSite.js';
+import { findNearbyTempStations, recommendStation } from '../amedas.js';
+import { WEATHER_V2_ENABLED } from '../weather-v2-flag.js';
 import { state } from '../state.js';
 import { focusOnDate } from './calendar.js';
 import { eventRowHtml } from './event-row.js';
@@ -894,6 +897,135 @@ export function openLocationSheet(onResolved, { skippable = true } = {}) {
       errEl.textContent = e.message || '登録に失敗しました';
     }
   });
+}
+
+// ---- 気象V2: 火のある場所(郵便番号ベース) ----
+// 郵便番号はあくまで住所入力を楽にする手段で、実際に使うのは解決後の緯度経度・
+// 気象庁発表区分だけ(fireSite.js参照)。既存のopenLocationSheet(都道府県/市区町村選択)は
+// V1のまま残し、WEATHER_V2_ENABLED時のみこちらを使う。
+export function openFireSiteSheet(onResolved, { skippable = true } = {}) {
+  const ov = openOverlay(`
+    <div class="sheet">
+      <div class="sheet-title">火のある場所を教えてください</div>
+      <div style="font-size:calc(12px * var(--font-scale));color:var(--khaki);line-height:1.7;margin-bottom:10px">
+        薪ストーブが設置されている場所の郵便番号を入力してください。現在地(スマートフォンの位置情報)は使いません。番地までは特定しません。
+      </div>
+      <div class="field">
+        <label>郵便番号</label>
+        <input class="box" id="fs-postal" placeholder="7291404" inputmode="numeric" maxlength="8">
+      </div>
+      <div id="fs-error" style="font-size:calc(11px * var(--font-scale));color:var(--red);margin-bottom:8px"></div>
+      <div class="btn-row" style="margin-top:4px">
+        ${skippable ? '<button class="btn-ghost" id="fs-skip">あとで</button>' : ''}
+        <button class="btn-primary" style="flex:1" id="fs-search">住所を探す</button>
+      </div>
+      <div id="fs-candidates" style="margin-top:10px"></div>
+    </div>
+  `);
+  if (skippable) {
+    ov.querySelector('#fs-skip').addEventListener('click', () => {
+      localStorage.setItem('himori.onboardingDismissed', '1');
+      closeOverlay();
+    });
+  }
+  ov.querySelector('#fs-search').addEventListener('click', async () => {
+    const postal = ov.querySelector('#fs-postal').value;
+    const errEl = ov.querySelector('#fs-error');
+    const candEl = ov.querySelector('#fs-candidates');
+    errEl.textContent = '';
+    candEl.innerHTML = '';
+    try {
+      const candidates = await lookupAddressCandidates(postal);
+      candEl.innerHTML = candidates
+        .map(
+          (c, i) => `
+        <div class="card" style="margin-bottom:8px">
+          <div style="font-weight:700">${c.prefecture}${c.city}${c.town}</div>
+          <button class="btn-primary" style="width:100%;margin-top:8px" data-action="fs-confirm" data-idx="${i}">この地域を火のある場所にする</button>
+        </div>`
+        )
+        .join('');
+      candEl.querySelectorAll('[data-action="fs-confirm"]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const candidate = candidates[Number(btn.dataset.idx)];
+          const location = await resolveFireSite(candidate);
+          updateProfile({ location });
+          localStorage.setItem('himori.onboardingDismissed', '1');
+          closeOverlay();
+          showToast('火のある場所を登録しました');
+          onResolved && onResolved();
+        });
+      });
+    } catch (e) {
+      errEl.textContent = e.message || '住所の取得に失敗しました';
+    }
+  });
+}
+
+// ---- 気象V2: 季節の記録に使う観測点(アメダス) ----
+// 「火のある場所」の緯度経度から近い順に気温観測地点の候補を提示し、その中から
+// 選んでもらう(最寄り1地点に強制固定しない)。予報地点(火のある場所)と過去の
+// 観測点(ここで選ぶアメダス地点)は別概念であることをUI文言でも明示する。
+export function openAmedasStationSheet(onSelected) {
+  const profile = getProfile();
+  if (!profile.location) {
+    showToast('先に「火のある場所」を登録してください');
+    return;
+  }
+  const ov = openOverlay(`
+    <div class="sheet">
+      <div class="sheet-title">季節の記録に使う観測点</div>
+      <div style="font-size:calc(12px * var(--font-scale));color:var(--khaki);line-height:1.7;margin-bottom:10px">
+        気象庁アメダスの中から、火のある場所に近い観測点を選びます。観測点の気温は、火のある場所そのものの気温ではありません。
+      </div>
+      <div id="as-body"><div class="label-sm">近くの観測点を探しています…</div></div>
+    </div>
+  `);
+  (async () => {
+    const bodyEl = ov.querySelector('#as-body');
+    try {
+      const candidates = await findNearbyTempStations(profile.location.lat, profile.location.lon);
+      if (!candidates.length) {
+        bodyEl.innerHTML = `<div class="empty">近くに気温を観測している地点が見つかりませんでした。</div>`;
+        return;
+      }
+      const recommended = recommendStation(candidates);
+      const others = candidates.filter((c) => c.id !== recommended.id);
+      const stationRow = (s, isRecommended) => `
+        <div class="card" style="margin-bottom:8px${isRecommended ? ';border:1.5px solid var(--ember)' : ''}">
+          ${isRecommended ? '<div class="label-sm" style="color:var(--ember);margin-bottom:4px">HIMORIおすすめ</div>' : ''}
+          <div style="font-weight:700">${s.name}</div>
+          <div class="label-sm" style="margin-top:2px">火のある場所から 約${s.distanceKm.toFixed(1)}km ・ 観測所標高 ${Math.round(s.alt)}m ・ 気温観測あり</div>
+          <button class="btn-primary" style="width:100%;margin-top:8px" data-action="as-pick" data-id="${s.id}">${s.name}を使う</button>
+        </div>`;
+      bodyEl.innerHTML =
+        stationRow(recommended, true) +
+        (others.length
+          ? `<div class="label-sm" style="margin:10px 0 6px">ほかの候補</div>${others.map((s) => stationRow(s, false)).join('')}`
+          : '');
+      bodyEl.querySelectorAll('[data-action="as-pick"]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const picked = candidates.find((c) => c.id === btn.dataset.id);
+          updateProfile({
+            amedasStation: {
+              id: picked.id,
+              name: picked.name,
+              lat: picked.lat,
+              lon: picked.lon,
+              alt: picked.alt,
+              distanceKm: Math.round(picked.distanceKm * 10) / 10,
+              selectedAt: localIsoDate(),
+            },
+          });
+          closeOverlay();
+          showToast(`観測点を「${picked.name}」に設定しました`);
+          onSelected && onSelected();
+        });
+      });
+    } catch {
+      bodyEl.innerHTML = `<div class="empty">観測点の取得に失敗しました。時間をおいて再度お試しください。</div>`;
+    }
+  })();
 }
 
 // 気象庁の行政区分(南部/北部など)は、必ずしも実際の気候と一致しない(山間部の町が

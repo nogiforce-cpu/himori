@@ -325,6 +325,11 @@ const DRY_FRIENDLY_EMC_THRESHOLD = 15;
 const DRY_FRIENDLY_PRECIP_MM = 2;
 export function dryFriendlyDaysCount(dailyWeather) {
   if (!dailyWeather || !dailyWeather.length) return null;
+  // 湿度予報(humidityMean)は気象庁の公式発表に存在しない項目のため、気象V2では
+  // dailyWeatherに含まれない。含まれていない場合はNaN比較で常にfalseになり
+  // 「乾燥に向いた日が0日」という誤った断定を表示してしまうため、データが無い時点で
+  // nullを返して呼び出し側(check.js)に非表示にしてもらう。
+  if (dailyWeather[0].humidityMean == null) return null;
   return dailyWeather.filter(
     (d) =>
       d.precipitationSum <= DRY_FRIENDLY_PRECIP_MM &&

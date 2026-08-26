@@ -12,9 +12,10 @@ import {
 } from '../store.js';
 import { requestNotificationPermission } from '../weather.js';
 import { showToast, go, openConfirmSheet } from '../ui.js';
-import { openEditSheet, openLocationSheet, openInfoSheet } from './sheets.js';
+import { openEditSheet, openLocationSheet, openFireSiteSheet, openAmedasStationSheet, openInfoSheet } from './sheets.js';
 import { daysBetween, isBelowSafetyLine, shouldPromptSeasonEnd } from '../derive.js';
 import { localIsoDate } from '../date-utils.js';
+import { WEATHER_V2_ENABLED } from '../weather-v2-flag.js';
 
 const LAST_EXPORT_KEY = 'himori.lastExportDate';
 
@@ -67,7 +68,12 @@ export function render() {
     <div class="settings-row" data-action="toggle-notifications"><span>通知設定</span><span class="v"><button class="switch ${profile.notificationsEnabled ? 'on' : ''}"></button></span></div>
     <div class="settings-row" data-action="toggle-theme"><span>テーマ設定</span><span class="v">${profile.theme === 'light' ? 'ライト' : 'ダーク'}<button class="switch ${profile.theme === 'light' ? 'on' : ''}"></button></span></div>
     <div class="settings-row" data-action="cycle-text-size"><span>文字サイズ</span><span class="v">${TEXT_SIZE_LABELS[profile.textSize || 'normal']} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
-    <div class="settings-row" data-action="edit-location"><span>お住まいの地域(天気連動)</span><span class="v">${profile.location ? `${profile.location.prefecture}${profile.location.city}` : '未設定'} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
+    <div class="settings-row" data-action="edit-location"><span>${WEATHER_V2_ENABLED ? '火のある場所' : 'お住まいの地域(天気連動)'}</span><span class="v">${profile.location ? `${profile.location.prefecture}${profile.location.city}${profile.location.town ?? ''}` : '未設定'} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
+    ${
+      WEATHER_V2_ENABLED
+        ? `<div class="settings-row" data-action="edit-amedas-station"><span>季節の記録に使う観測点</span><span class="v">${profile.amedasStation ? `${profile.amedasStation.name}(気象庁)` : '未設定'} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>`
+        : ''
+    }
   `;
 
   const lastExport = localStorage.getItem(LAST_EXPORT_KEY);
@@ -193,7 +199,15 @@ export function toggleTheme() {
 }
 
 export function editLocation() {
-  openLocationSheet(() => render(), { skippable: false });
+  if (WEATHER_V2_ENABLED) {
+    openFireSiteSheet(() => render(), { skippable: false });
+  } else {
+    openLocationSheet(() => render(), { skippable: false });
+  }
+}
+
+export function editAmedasStation() {
+  openAmedasStationSheet(() => render());
 }
 
 export function editChimney() {
