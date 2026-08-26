@@ -543,6 +543,9 @@ function wireRatingRow(root, key, onChange) {
 // 樹種コレクション一覧: 「登録件数」ではなく「出会った樹種」の感覚を大切にし、写真を
 // 主役に据える。カード自体をタップすると詳細(一般情報+自分の記録)へ進む(削除などの
 // 操作はカードから外し、詳細画面の設定領域へ集約している)。
+// 樹種詳細を見て戻ってきた時にスクロール位置が先頭へ戻ってしまわないよう、直近の
+// スクロール位置をセッション内だけ覚えておく(大掛かりな状態管理は不要な範囲の対応)。
+let collectionScrollTop = 0;
 export function openWoodTypeCollectionSheet() {
   function draw() {
     const catalog = getWoodTypeCatalog();
@@ -576,6 +579,10 @@ export function openWoodTypeCollectionSheet() {
     ov.querySelector('#woodtype-empty-cta')?.addEventListener('click', () => {
       openAddWoodTypeSheet(() => openWoodTypeCollectionSheet());
     });
+    // 内容を描き終えてからでないと、スクロール可能な高さが確定せず正しい位置に
+    // 戻せないため、restoreは必ずinnerHTMLの反映後に行う。
+    const sheetEl = ov.querySelector('.sheet');
+    if (sheetEl) sheetEl.scrollTop = collectionScrollTop;
   }
 
   const ov = openOverlay(`
@@ -593,6 +600,9 @@ export function openWoodTypeCollectionSheet() {
   `);
   ov.querySelector('#woodtype-add-open-btn').addEventListener('click', () => {
     openAddWoodTypeSheet(() => openWoodTypeCollectionSheet());
+  });
+  ov.querySelector('.sheet').addEventListener('scroll', (e) => {
+    collectionScrollTop = e.target.scrollTop;
   });
   draw();
 }
@@ -666,7 +676,12 @@ export function openAddWoodTypeSheet(onSaved) {
 // 初めて記録した時期→一般的な特徴(既存のWOOD_TRIVIAのみ、新しい一般情報は増やさない)→
 // 自分の記録(薪追加の履歴)→写真→自分のメモ・評価、という順で並べ、削除だけ最下部の
 // 設定領域に分離する(見る/操作の分離。薪棚チェック画面と同じ考え方)。
-export function openWoodTypeDetailSheet(name) {
+//
+// onClose: 「戻る」で呼ぶコールバック。呼び出し元(樹種一覧のカード/ホームの
+// event-row/カレンダー日別詳細のevent-row・バナー/写真詳細の「この樹種を見る」)ごとに
+// 「元いた場所を再現する」ための関数をそのまま渡してもらう(history.back()は使わず、
+// HIMORI側で明示的に戻り先を管理する)。省略時(=戻り先情報が無い場合)は樹種一覧へ。
+export function openWoodTypeDetailSheet(name, onClose = () => openWoodTypeCollectionSheet()) {
   function draw() {
     const ov = document.querySelector('[data-dynamic-overlay="true"]');
     if (!ov) return;
@@ -732,7 +747,7 @@ export function openWoodTypeDetailSheet(name) {
 
     ov.querySelector('#wt-detail-close').addEventListener('click', () => {
       closeOverlay();
-      openWoodTypeCollectionSheet();
+      onClose();
     });
     ov.querySelector('#wt-detail-photo').addEventListener('click', async () => {
       const file = await pickImageFile();
@@ -752,7 +767,9 @@ export function openWoodTypeDetailSheet(name) {
         if (!photo) return;
         openPhotoViewSheet(photo, () => {
           deletePhoto(photo.id);
-          openWoodTypeDetailSheet(name);
+          // 削除後もこの樹種詳細に戻ってくるので、開いた時のonClose(元の戻り先)を
+          // そのまま引き継ぐ(削除のたびに戻り先が樹種一覧へリセットされないように)。
+          openWoodTypeDetailSheet(name, onClose);
         });
       });
     });
@@ -1031,7 +1048,9 @@ export function openPhotoViewSheet(photo, onDeleted) {
   });
   ov.querySelector('#photo-goto-woodtype')?.addEventListener('click', () => {
     closeOverlay();
-    openWoodTypeDetailSheet(woodType);
+    // 樹種詳細を閉じたら、この同じ写真シートへそのまま戻れるようにする
+    // (アルバムから開いた場合、一覧へは飛ばさず元の写真詳細を再現する)。
+    openWoodTypeDetailSheet(woodType, () => openPhotoViewSheet(photo, onDeleted));
   });
   ov.querySelector('#photo-goto-day').addEventListener('click', () => {
     closeOverlay();

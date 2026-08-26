@@ -264,7 +264,9 @@ function livingWithWoodHtml(shelves, previousSeason) {
   const events = livingWithWoodEvents(shelves, previousSeason);
   if (events.length === 0) return '';
 
-  const rows = events.map((e) => eventRowHtml(e, monthDayLabel(e.date))).join('');
+  // returnType:'home' を添えて、樹種詳細を閉じた時にホームへそのまま戻れるようにする
+  // (ホーム画面自体は開いたままなので、閉じるだけで元の状態・スクロール位置に戻る)。
+  const rows = events.map((e) => eventRowHtml({ ...e, returnType: 'home' }, monthDayLabel(e.date))).join('');
 
   return `
     <div class="label-sm" style="margin-bottom:2px">薪のある日々</div>

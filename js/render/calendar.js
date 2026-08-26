@@ -285,11 +285,17 @@ export function openCalDay(dateIso) {
   }
   newWoodTypeNames.forEach((name) => {
     sections.push(
-      `<div class="banner" style="margin:0 0 10px;cursor:pointer" data-action="open-woodtype-detail" data-name="${name}"><img src="assets/icon-woodtype.png" alt="" style="width:16px;height:16px;object-fit:contain"><span>${name}という樹種を初めて記録しました</span></div>`
+      `<div class="banner" style="margin:0 0 10px;cursor:pointer" data-action="open-woodtype-detail" data-name="${name}" data-return-type="calendar-day" data-return-date="${dateIso}"><img src="assets/icon-woodtype.png" alt="" style="width:16px;height:16px;object-fit:contain"><span>${name}という樹種を初めて記録しました</span></div>`
     );
   });
   if (events.length) {
-    sections.push(events.map((e) => eventRowHtml(e, subLineFor(e, { checks, additions, burns, maint }))).join(''));
+    // returnType:'calendar-day' を添えて、樹種詳細を閉じた時にこの日の詳細シートへ
+    // そのまま戻れるようにする(カレンダー本体の月表示・スクロールには触れない)。
+    sections.push(
+      events
+        .map((e) => eventRowHtml({ ...e, returnType: 'calendar-day', returnDate: dateIso }, subLineFor(e, { checks, additions, burns, maint })))
+        .join('')
+    );
   }
   const lastYear = lastYearHighlights(dateIso);
   if (lastYear.length) {

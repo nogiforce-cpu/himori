@@ -166,7 +166,20 @@ function wireStatic() {
 const ACTIONS = {
   'open-add-shelf': () => openAddShelfSheet(renderAll),
   'open-woodtypes': () => openWoodTypeCollectionSheet(),
-  'open-woodtype-detail': (el) => openWoodTypeDetailSheet(el.dataset.name),
+  // 樹種詳細の「戻る」は、開いた場所ごとに軽量な戻り先(returnType/returnDate)を
+  // data属性で受け取り、それに応じたコールバックを組み立てる(history.back()は使わない)。
+  // returnTypeが無い場合(樹種一覧のカードなど)はopenWoodTypeDetailSheetのデフォルト
+  // (樹種一覧へ戻る)にそのまま委ねる。
+  'open-woodtype-detail': (el) => {
+    const returnType = el.dataset.returnType;
+    const onClose =
+      returnType === 'home'
+        ? () => {} // ホーム画面はそのまま残っているので、閉じるだけで元の状態に戻る
+        : returnType === 'calendar-day'
+          ? () => calendar.openCalDay(el.dataset.returnDate)
+          : undefined;
+    openWoodTypeDetailSheet(el.dataset.name, onClose);
+  },
   'toggle-weather-detail': () => home.toggleWeatherDetail(),
   'open-shelf-check': (el) => shelves.openShelfCheck(el.dataset.shelfId),
   'edit-shelf-from-list': (el) => shelves.editShelfFromList(el.dataset.shelfId),
