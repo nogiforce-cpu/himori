@@ -159,6 +159,12 @@ export function moistureDisplayText(latestCheck) {
 // 含水率の入力欄・履歴の両方でこの閾値を使って明示する。
 export const DRY_MOISTURE_THRESHOLD_PERCENT = 20;
 
+// 「強い冷え込み」とみなす最低気温の目安。日本の広い範囲で見て「明確に厳しい寒さ」と
+// 言える水準として-5℃を採用(0℃前後の通常の冬日まで拾うと毎日表示になり、
+// 「季節の気配」としての特別感が薄れてしまうため)。カレンダー(過去の記録)・
+// ホーム(近い未来の予報)の両方で同じ基準を使う。
+export const COLD_SNAP_THRESHOLD = -5;
+
 // 「そろそろ乾燥薪」の目安ヒント: 乾燥開始から一定日数、または直近チェックの含水率が閾値以下
 export function shouldShowDryAdvisory(shelf, latestCheck) {
   if (!shelf || shelf.status !== '乾燥中') return false;

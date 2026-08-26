@@ -16,16 +16,12 @@ import {
   overallCheckState,
   buildLivingWithWoodEvents,
   firstWoodTypeDates,
+  COLD_SNAP_THRESHOLD,
 } from '../derive.js';
 import { openOverlay } from '../ui.js';
 import { state } from '../state.js';
 import { localIsoDate } from '../date-utils.js';
 import { eventRowHtml } from './event-row.js';
-
-// 「強い冷え込み」とみなす最低気温の目安。日本の広い範囲で見て「明確に厳しい寒さ」と
-// 言える水準として-5℃を採用(0℃前後の通常の冬日まで拾うと毎日表示になり、
-// 「季節の気配」としての特別感が薄れてしまうため)。
-const COLD_SNAP_THRESHOLD = -5;
 
 // カレンダー・日別詳細の両方で使う「今の全記録」。呼ぶたびに毎回組み立てる薄い変換で、
 // 新しいイベントDBへ書き出したりはしない(ホームの「薪のある日々」と同じアダプター)。
@@ -232,20 +228,29 @@ function dateHeadingLabel(dateIso) {
 // (実際に記録された最低気温・分かる範囲の降水種別)だけから判定する。新しい天気APIや
 // 複雑な予測は使わず、安全に分かる範囲だけを扱う。cycleStartは「今季」の起点
 // (前シーズン終了日。無ければ全期間)で、home.js等と同じ考え方を流用している。
+// 節目が重なった日でも文章を並べすぎないよう、最も意味の強いものだけを選ぶ。
+// 優先順位: 雪(初雪>雪の日) > 強い冷え込み(-5℃以下、毎回) > 今季初の氷点下 > 今季初の
+// 10℃未満。「一桁」という表現は日本語として不自然なので使わず、「10℃を下回りました」
+// 「氷点下になりました」という具体的な言い方に統一する。
 function weatherMilestoneNote(dateIso, weatherHistory, cycleStart) {
   const entry = weatherHistory.find((w) => w.date === dateIso);
   if (!entry) return null;
   const inCycle = (d) => !cycleStart || d > cycleStart;
   const priorInCycle = weatherHistory.filter((w) => w.date < dateIso && inCycle(w.date));
+  const coldSuffix = entry.tempMin <= COLD_SNAP_THRESHOLD ? `(最低${entry.tempMin}℃)` : '';
+
   if (entry.precipCategory === 'snow') {
     const hadSnowBefore = priorInCycle.some((w) => w.precipCategory === 'snow');
-    return hadSnowBefore ? '雪の日でした。' : '初雪の日でした。';
+    return (hadSnowBefore ? '雪の日でした' : '今季初めて雪が降りました') + coldSuffix + '。';
   }
   if (entry.tempMin <= COLD_SNAP_THRESHOLD) {
-    return `強い冷え込みでした(最低${entry.tempMin}℃)。`;
+    return `冷え込みの強い一日でした(最低${entry.tempMin}℃)。`;
+  }
+  if (entry.tempMin < 0 && !priorInCycle.some((w) => w.tempMin < 0)) {
+    return '今季初めて、氷点下になりました。';
   }
   if (entry.tempMin < 10 && !priorInCycle.some((w) => w.tempMin < 10)) {
-    return `今季初めて、最低気温が一桁(${entry.tempMin}℃)になった日でした。`;
+    return '今季初めて、最低気温が10℃を下回りました。';
   }
   return null;
 }

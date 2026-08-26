@@ -37,6 +37,7 @@ import {
   monthDayLabel,
   shelfStatusLabel,
   buildLivingWithWoodEvents,
+  COLD_SNAP_THRESHOLD,
   BURN_CONSUMPTION_M3,
 } from '../derive.js';
 import { upcoming48hRisk, upcomingDaysSummary } from '../weather.js';
@@ -104,20 +105,21 @@ function weatherSourceHtml(weather) {
     </div>`;
 }
 
-// ホーム下部の天気は「気象情報を表示する」のではなく「薪ストーブ生活の文脈で
-// 一言だけ伝える」ことを目的にする。数日分の詳細・出典表記は情報として正しくても
-// ホームには重いため、詳しい内容は「詳しい天気を見る」の折りたたみに格納し、
-// ここでは明日の予報から意味のある時だけ短い一文を出す(平常運転の日は何も言わない
-// 方が、過剰な擬人化・毎日同じ定型文の繰り返しを避けられる)。
+// ホーム下部の天気は「天気予報を表示する」のではなく「火の季節が近づく気配を一言だけ
+// 伝える」ことを目的にする。HIMORIは天気アプリではないため、普通の雨・晴れ・気温一覧は
+// 表示しない(そのための情報はここではなく「詳しい天気を見る」の折りたたみに格納)。
+// 雪>強い冷え込みの優先順位で最も意味のある1つだけ短く伝え、該当が無ければ何も言わない
+// (毎日何かを言わなければならないアプリにはしない)。48時間以内の安全上の注意は
+// ホーム上部の別バナーが担っているため、ここでは重ねて言わず季節感だけに絞る。
+// 雪だけは「警告」ではなく「少し嬉しくなる季節の便り」として、HIMORI専用のi-snow
+// アイコンを添えて少し特別に見せる(絵文字ではなく既存のSVG資産を再利用)。
 function weatherContextLine(weather, phase) {
-  if (!weather?.daily?.length) return '';
+  if (!weather?.daily?.length || phase === 'off') return null;
   const tomorrow = weather.daily[1] || weather.daily[0];
-  if (!tomorrow) return '';
-  if (tomorrow.precipCategory === 'snow') return `明日は雪の予報です。最高${tomorrow.tempMax}℃。`;
-  if (phase !== 'off' && tomorrow.tempMin <= 5) return `明日は冷え込みそうです。最低${tomorrow.tempMin}℃。火が恋しい一日になりそうです。`;
-  if (tomorrow.tempMax >= 30) return '明日も暑くなりそうです。薪仕事は涼しい時間に。';
-  if (tomorrow.precipCategory === 'rain') return '明日は雨の予報です。';
-  return '';
+  if (!tomorrow) return null;
+  if (tomorrow.precipCategory === 'snow') return { text: '明日は雪になりそうです。', snow: true };
+  if (tomorrow.tempMin <= COLD_SNAP_THRESHOLD) return { text: `明日の朝は冷え込みそうです(最低${tomorrow.tempMin}℃)。`, snow: false };
+  return null;
 }
 
 // ホーム最上部の「今季の薪」カード。以前は充足率(%)・あと何日分・いつまで持つかという
@@ -337,7 +339,7 @@ function offSeasonTip({ weather, shelves, allChecks, maintenanceLogs, woodTypeCa
 }
 
 function hitokoto(ctx) {
-  const { score, shelf, weather, offSeason, phase, lastCheckDate } = ctx;
+  const { score, shelf, offSeason, phase, lastCheckDate } = ctx;
   if (phase === 'off') return offSeasonTip(ctx);
   if (phase === 'shoulder') {
     const month = Number(todayIso().slice(5, 7));
@@ -372,8 +374,9 @@ function hitokoto(ctx) {
   } else {
     main = rotate(['薪棚の残りが少なくなってきました。', 'そろそろ棚の底が見えてきた頃合いです。', '薪を足すと、また安心して焚けます。']);
   }
-  const peakRisk = weather ? upcoming48hRisk(weather.daily) : null;
-  if (peakRisk) note = note ? note : '冷え込みや雨の予報があるので、多めに運んでおくと安心です。';
+  // 48時間以内の冷え込み・雨・雪は、この下に別途出るバナー(banners配列)が既に
+  // 同じ内容を伝えているため、ここでは重ねて言わない(以前はここにも似た文言が出ることが
+  // あり、同じ意味の注意が2箇所に並んで見えてしまっていた)。
   return { main, note };
 }
 
@@ -515,9 +518,11 @@ export function render() {
   // 詳細情報(第5階層): 薪ストーブ生活の文脈での短い一言だけを常時表示し、
   // 数日分の予報・出典は「詳しい天気を見る」の折りたたみに格納する
   const weatherContextEl = document.getElementById('home-weather-context');
-  const contextText = weatherContextLine(weather, phase);
-  weatherContextEl.textContent = contextText;
-  weatherContextEl.style.display = contextText ? '' : 'none';
+  const context = weatherContextLine(weather, phase);
+  weatherContextEl.innerHTML = context
+    ? `${context.snow ? '<svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;color:var(--rain);vertical-align:-1px;margin-right:4px"><use href="#i-snow"/></svg>' : ''}${context.text}`
+    : '';
+  weatherContextEl.style.display = context ? '' : 'none';
   const weatherToggleEl = document.getElementById('btn-weather-detail-toggle');
   weatherToggleEl.style.display = weather ? '' : 'none';
   document.getElementById('home-weather-strip').innerHTML = weatherStripHtml(weather);
