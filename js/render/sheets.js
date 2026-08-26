@@ -25,6 +25,7 @@ import {
   getChecks,
   updateCheck,
   deleteCheck,
+  getBurnLogs,
 } from '../store.js';
 import {
   applyWoodAddition,
@@ -36,6 +37,9 @@ import {
   resolvePhotoShelfId,
   monthDayLabel,
   firstWoodTypeDates,
+  stoveYears,
+  firstBurnDate,
+  buildLivingWithWoodEvents,
 } from '../derive.js';
 import { localIsoDate } from '../date-utils.js';
 import { pickImageFile, fileToResizedDataUrl } from '../photos.js';
@@ -1023,6 +1027,7 @@ export function openPhotoViewSheet(photo, onDeleted) {
   const shelfId = resolvePhotoShelfId(photo.id, shelves, getWoodAdditions());
   const shelf = shelfId ? shelves.find((s) => s.id === shelfId) : null;
   const woodType = photo.category === '樹種' ? photo.woodType : null;
+  const isStovePhoto = photo.category === 'ストーブ';
   const captionName = woodType || (shelf ? shelf.name : photo.category);
   const ov = openOverlay(`
     <div class="sheet">
@@ -1031,6 +1036,7 @@ export function openPhotoViewSheet(photo, onDeleted) {
       <div class="row" style="margin-bottom:12px;gap:16px;justify-content:flex-start;flex-wrap:wrap">
         ${shelf ? `<button class="link-btn" style="padding:0" id="photo-goto-shelf">この薪棚を見る</button>` : ''}
         ${woodType ? `<button class="link-btn" style="padding:0" id="photo-goto-woodtype">この樹種を見る</button>` : ''}
+        ${isStovePhoto ? `<button class="link-btn" style="padding:0" id="photo-goto-stove">この愛機を見る</button>` : ''}
         <button class="link-btn" style="padding:0" id="photo-goto-day">この日の記録を見る</button>
       </div>
       ${canShare ? `<button class="btn-ghost" id="photo-share-btn" style="width:100%;margin-bottom:8px">この写真で調べる(樹種など)</button>` : ''}
@@ -1051,6 +1057,10 @@ export function openPhotoViewSheet(photo, onDeleted) {
     // 樹種詳細を閉じたら、この同じ写真シートへそのまま戻れるようにする
     // (アルバムから開いた場合、一覧へは飛ばさず元の写真詳細を再現する)。
     openWoodTypeDetailSheet(woodType, () => openPhotoViewSheet(photo, onDeleted));
+  });
+  ov.querySelector('#photo-goto-stove')?.addEventListener('click', () => {
+    closeOverlay();
+    openStoveDetailSheet(() => openPhotoViewSheet(photo, onDeleted));
   });
   ov.querySelector('#photo-goto-day').addEventListener('click', () => {
     closeOverlay();
@@ -1349,15 +1359,16 @@ export function openStoveEditSheet(onSaved) {
   const ov = openOverlay(`
     <div class="sheet">
       <div class="row" style="margin-bottom:10px">
-        <span class="sheet-title" style="margin-bottom:0">薪ストーブ情報</span>
+        <span class="sheet-title" style="margin-bottom:0">愛機を編集</span>
         <button class="iconbtn" data-action="close-overlay"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button>
       </div>
+      ${photoFieldHtml('stove-edit-photo', existingUri)}
       <div class="field">
-        <label>ストーブ名</label>
+        <label>モデル名</label>
         <input class="box" id="stove-edit-name" type="text" value="${stove.name}">
       </div>
       <div class="field">
-        <label>購入日</label>
+        <label>使い始めた日</label>
         <input class="box" id="stove-edit-purchase" type="date" value="${stove.purchaseDate ?? ''}">
       </div>
       <div class="field">
@@ -1368,7 +1379,6 @@ export function openStoveEditSheet(onSaved) {
           この機種には触媒がない
         </label>
       </div>
-      ${photoFieldHtml('stove-edit-photo', existingUri)}
       <button class="btn-primary" id="stove-edit-save">保存する</button>
     </div>
   `);
@@ -1393,12 +1403,136 @@ export function openStoveEditSheet(onSaved) {
       }
       updateProfile({ stove: { ...stove, name, purchaseDate, catalystReplacedAt, hasCatalyst, photoId } });
       closeOverlay();
-      showToast('薪ストーブ情報を保存しました');
+      showToast('愛機を保存しました');
       onSaved && onSaved();
     } catch {
       showToast('保存に失敗しました。写真の保存容量が上限に近づいている可能性があります');
     }
   });
+}
+
+// ---- 愛機詳細: 「このストーブと過ごしてきた時間」を眺める場所。機器管理台帳にしないため、
+// 写真→モデル名→火のある暮らし◯年目→このストーブの記録(初めて火を入れた日+メンテナンス、
+// 時系列のevent-row)→写真→自分のメモ、という順で並べる。編集は鉛筆アイコンから既存の
+// openStoveEditSheetを開くだけにとどめる(見る/操作の分離)。HIMORIは1台のストーブを
+// 前提にしており(profile.stoveは常に存在)、削除操作は用意しない。
+//
+// onClose: 樹種詳細と同じ軽量な戻り先パターン。ホーム/設定からは「閉じるだけ」、
+// カレンダーの日別詳細からは「同じ日の詳細シートへ戻る」、写真詳細からは「同じ写真詳細へ
+// 戻る」を、それぞれの呼び出し元がコールバックとして渡す。
+export function openStoveDetailSheet(onClose = () => {}) {
+  function draw() {
+    const ov = document.querySelector('[data-dynamic-overlay="true"]');
+    if (!ov) return;
+    const stove = getProfile().stove;
+    const photo = stove.photoId ? getPhotos().find((p) => p.id === stove.photoId) : null;
+    const years = stoveYears(stove.purchaseDate);
+
+    // メンテナンス記録を、種類別の表ではなく時系列のevent-rowに変える(既存の
+    // buildLivingWithWoodEventsをそのまま再利用。薪棚・薪追加等は空配列で渡し、
+    // メンテナンスだけを取り出す)。「初めて火を入れた日」はburnLogsの最古日から
+    // 安全に算出できる場合のみ、1件だけ節目として添える。
+    const maintEvents = buildLivingWithWoodEvents({
+      shelves: [],
+      woodAdditions: [],
+      splitLogs: [],
+      checks: [],
+      burnLogs: [],
+      maintenanceLogs: getMaintenanceLogs(),
+      photos: getPhotos(),
+    }).filter((e) => e.type === 'maintenance');
+    const firstBurn = firstBurnDate(getBurnLogs());
+    const timeline = firstBurn
+      ? [...maintEvents, { date: firstBurn, icon: '#i-flame', iconColor: 'var(--ember)', text: '初めて火を入れました' }]
+      : maintEvents;
+    timeline.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    const shownEvents = timeline.slice(0, 5);
+    const eventsHtml = shownEvents.length
+      ? shownEvents.map((e) => eventRowHtml(e, monthDayLabel(e.date))).join('')
+      : `<div class="empty" style="padding:10px 4px">まだ記録がありません。メンテナンスを記録すると、ここに積み重なっていきます。</div>`;
+
+    const stovePhotos = getPhotos().filter((p) => p.category === 'ストーブ');
+    const shownPhotos = stovePhotos.slice(0, 4);
+    const photosHtml = shownPhotos.length
+      ? `<div class="album-grid">${shownPhotos.map((p) => `<div class="photo-ph" data-stove-photo-id="${p.id}" style="cursor:pointer"><img src="${p.uri}" alt=""></div>`).join('')}</div>`
+      : `<div class="empty" style="padding:10px 4px">まだ写真がありません。</div>`;
+
+    ov.querySelector('.sheet').innerHTML = `
+      <div class="row" style="margin-bottom:10px">
+        <span class="sheet-title" style="margin-bottom:0">愛機</span>
+        <div style="display:flex;gap:6px">
+          <button class="iconbtn" id="stove-edit-open-btn"><svg class="icon" viewBox="0 0 24 24"><use href="#i-edit"/></svg></button>
+          <button class="iconbtn" id="stove-detail-close"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button>
+        </div>
+      </div>
+      <div class="photo-ph${photo ? '' : ' empty'}" id="stove-detail-photo" style="height:200px;margin-bottom:12px;cursor:pointer">
+        ${photo ? `<img src="${photo.uri}" alt="">` : EMPTY_PHOTO_INNER}
+      </div>
+      <div style="font-size:calc(17px * var(--font-scale));font-weight:700">${stove.name}</div>
+      ${years ? `<div class="label-sm" style="margin-top:2px">火のある暮らし、${years}年目</div>` : ''}
+
+      <div class="label-sm" style="font-weight:700;margin:18px 0 2px">このストーブの記録</div>
+      <div style="margin-bottom:6px">${eventsHtml}</div>
+      <button class="link-btn" id="stove-maint-link" style="padding:0 0 16px">メンテナンスを記録する</button>
+
+      <div class="label-sm" style="font-weight:700;margin-bottom:6px">写真</div>
+      <div style="margin-bottom:6px">${photosHtml}</div>
+      ${stovePhotos.length > shownPhotos.length ? `<button class="link-btn" id="stove-photos-link" style="padding:0 0 16px">すべての写真を見る</button>` : ''}
+
+      <div class="label-sm" style="font-weight:700;margin:18px 0 6px">自分のメモ</div>
+      <div class="field">
+        <label>メモ(任意)</label>
+        <textarea class="box" id="stove-memo" placeholder="例: 熾火がきれい。冬の朝はこの焚き方が好き">${stove.memo || ''}</textarea>
+      </div>
+      <button class="btn-ghost" id="stove-memo-save" style="width:100%">この記録を保存する</button>
+    `;
+
+    ov.querySelector('#stove-detail-close').addEventListener('click', () => {
+      closeOverlay();
+      onClose();
+    });
+    ov.querySelector('#stove-edit-open-btn').addEventListener('click', () => {
+      openStoveEditSheet(() => openStoveDetailSheet(onClose));
+    });
+    ov.querySelector('#stove-detail-photo').addEventListener('click', async () => {
+      const file = await pickImageFile();
+      if (!file) return;
+      const uri = await fileToResizedDataUrl(file);
+      try {
+        const newPhoto = addPhoto({ category: 'ストーブ', date: todayIso(), uri });
+        updateProfile({ stove: { ...getProfile().stove, photoId: newPhoto.id } });
+        draw();
+      } catch {
+        showToast('保存に失敗しました。写真の保存容量が上限に近づいている可能性があります');
+      }
+    });
+    ov.querySelector('#stove-maint-link').addEventListener('click', () => {
+      openMaintenanceSheet(() => {}, () => openStoveDetailSheet(onClose));
+    });
+    ov.querySelectorAll('[data-stove-photo-id]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const p = getPhotos().find((x) => x.id === el.dataset.stovePhotoId);
+        if (!p) return;
+        openPhotoViewSheet(p, () => {
+          deletePhoto(p.id);
+          openStoveDetailSheet(onClose);
+        });
+      });
+    });
+    ov.querySelector('#stove-photos-link')?.addEventListener('click', () => {
+      closeOverlay();
+      state.albumFilter = 'ストーブ';
+      go('album');
+    });
+    ov.querySelector('#stove-memo-save').addEventListener('click', () => {
+      const memo = ov.querySelector('#stove-memo').value.trim();
+      updateProfile({ stove: { ...getProfile().stove, memo } });
+      showToast('記録を保存しました');
+    });
+  }
+
+  openOverlay(`<div class="sheet"></div>`);
+  draw();
 }
 
 // ---- メンテナンス記録(煙突掃除・ガスケット交換・触媒交換・サビ取りなど) ----
@@ -1481,7 +1615,9 @@ function openSameDayMaintChoiceSheet({ onOverwrite, onAddNew }) {
   });
 }
 
-export function openMaintenanceSheet(onSaved) {
+// onClose: 「戻る」で呼ぶコールバック(樹種詳細と同じ軽量な戻り先パターン)。
+// 省略時は従来通り、閉じたら何もしない(呼び出し元の画面がそのまま見える)。
+export function openMaintenanceSheet(onSaved, onClose = () => {}) {
   function draw() {
     const ov = document.querySelector('[data-dynamic-overlay="true"]');
     if (!ov) return;
@@ -1492,7 +1628,7 @@ export function openMaintenanceSheet(onSaved) {
     <div class="sheet">
       <div class="row" style="margin-bottom:10px">
         <span class="sheet-title" style="margin-bottom:0">メンテナンス記録</span>
-        <button class="iconbtn" data-action="close-overlay"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button>
+        <button class="iconbtn" id="maint-sheet-close"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button>
       </div>
       <div class="field">
         <label>実施日</label>
@@ -1518,6 +1654,10 @@ export function openMaintenanceSheet(onSaved) {
       <div id="maint-history"></div>
     </div>
   `);
+  ov.querySelector('#maint-sheet-close').addEventListener('click', () => {
+    closeOverlay();
+    onClose();
+  });
   const typeSelect = ov.querySelector('#maint-type');
   const customField = ov.querySelector('#maint-custom-field');
   typeSelect.addEventListener('change', () => {

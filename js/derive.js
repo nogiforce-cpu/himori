@@ -127,6 +127,13 @@ export function lastBurnDate(burnLogs) {
   return burnLogs.reduce((max, b) => (b.date > max ? b.date : max), burnLogs[0].date);
 }
 
+// 焚いた最初の日(無ければnull)。HIMORIは1台のストーブを前提にしているため、
+// 全burnLogsの中で最も古い日が、そのまま「愛機に初めて火を入れた日」になる。
+export function firstBurnDate(burnLogs) {
+  if (!burnLogs.length) return null;
+  return burnLogs.reduce((min, b) => (b.date < min ? b.date : min), burnLogs[0].date);
+}
+
 // シーズン終了確認をそろそろ聞いてよいか(進行中シーズンがあり、直近askAfterDays焚いていない)
 export function shouldPromptSeasonEnd(currentSeason, burnLogs, askAfterDays = 21) {
   if (!currentSeason) return false;

@@ -5,7 +5,7 @@ import * as review from './render/review.js';
 import * as album from './render/album.js';
 import * as settings from './render/settings.js';
 import * as calendar from './render/calendar.js';
-import { openAddWoodModal, openAddShelfSheet, openWoodTypeCollectionSheet, openWoodTypeDetailSheet, openInfoSheet } from './render/sheets.js';
+import { openAddWoodModal, openAddShelfSheet, openWoodTypeCollectionSheet, openWoodTypeDetailSheet, openStoveDetailSheet, openInfoSheet } from './render/sheets.js';
 import { seedIfEmpty, getProfile, getShelves, getNotificationHistory } from './store.js';
 import { ensureWeatherFresh, maybeNotifyWeather, maybeNotifyChimney, maybeNotifyShelfCheck } from './weather.js';
 import { maybeStartOnboarding } from './onboarding.js';
@@ -174,11 +174,25 @@ const ACTIONS = {
     const returnType = el.dataset.returnType;
     const onClose =
       returnType === 'home'
-        ? () => {} // ホーム画面はそのまま残っているので、閉じるだけで元の状態に戻る
+        ? () => home.render() // ホーム画面はそのまま残っているが、削除等で樹種数が
+          // 変わっている可能性があるので軽く再描画する(タブ移動はしないのでスクロール位置は保たれる)
         : returnType === 'calendar-day'
           ? () => calendar.openCalDay(el.dataset.returnDate)
           : undefined;
     openWoodTypeDetailSheet(el.dataset.name, onClose);
+  },
+  // 愛機詳細も樹種詳細と同じ軽量な戻り先パターンを再利用する。
+  'open-stove-detail': (el) => {
+    const returnType = el.dataset.returnType;
+    const onClose =
+      returnType === 'calendar-day'
+        ? () => calendar.openCalDay(el.dataset.returnDate)
+        : returnType === 'settings'
+          ? () => settings.render()
+          // ホームなど: 元の画面はそのまま残っているが、編集で名前・写真・年数などが
+          // 変わっている可能性があるので軽く再描画する(タブ移動が無いのでスクロール位置は保たれる)
+          : () => home.render();
+    openStoveDetailSheet(onClose);
   },
   'toggle-weather-detail': () => home.toggleWeatherDetail(),
   'open-shelf-check': (el) => shelves.openShelfCheck(el.dataset.shelfId),
@@ -201,14 +215,12 @@ const ACTIONS = {
   'dismiss-season-end-prompt': () => home.dismissSeasonEndPrompt(),
   'open-cal-day': (el) => calendar.openCalDay(el.dataset.date),
   'edit-username': () => settings.editUsername(),
-  'edit-stove': () => settings.editStove(),
   'edit-stove-photo': (el, e) => {
     e.stopPropagation();
     home.editStovePhoto();
   },
   'edit-safety-line': () => settings.editSafetyLine(),
   'edit-season-target': () => settings.editSeasonTarget(),
-  'open-maintenance': () => settings.openMaintenance(),
   'toggle-notifications': () => settings.toggleNotifications(),
   'toggle-theme': () => settings.toggleTheme(),
   'cycle-text-size': () => settings.cycleTextSize(),

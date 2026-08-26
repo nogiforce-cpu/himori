@@ -499,14 +499,11 @@ export function render() {
       ${stovePhotoHtml}
     </div>
     <div style="flex:1">
-      <div style="font-size:calc(10px * var(--font-scale));color:var(--leather-text);letter-spacing:.5px">薪ストーブ</div>
+      <div style="font-size:calc(10px * var(--font-scale));color:var(--leather-text);letter-spacing:.5px">愛機</div>
       <div class="slab" style="font-size:calc(14px * var(--font-scale));font-weight:700">${profile.stove.name}</div>
     </div>
     ${years ? `<div style="font-size:calc(9px * var(--font-scale));color:#d9c6a8;border:1px solid rgba(242,234,214,.25);padding:3px 7px;border-radius:4px;flex-shrink:0">火のある暮らし、${years}年目</div>` : ''}
-    <div style="display:flex;align-items:center;gap:2px;flex-shrink:0;color:var(--leather-text)">
-      <span style="font-size:calc(10px * var(--font-scale));white-space:nowrap">メンテ記録</span>
-      <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg>
-    </div>
+    <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px;color:var(--leather-text);flex-shrink:0"><use href="#i-chevright"/></svg>
   `;
 
   document.getElementById('home-woodtypes').innerHTML = woodtypeCollectionHtml(getWoodTypeCatalog());

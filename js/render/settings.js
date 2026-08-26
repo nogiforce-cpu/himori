@@ -12,7 +12,7 @@ import {
 } from '../store.js';
 import { requestNotificationPermission } from '../weather.js';
 import { showToast, go, openConfirmSheet } from '../ui.js';
-import { openEditSheet, openStoveEditSheet, openLocationSheet, openInfoSheet, openMaintenanceSheet } from './sheets.js';
+import { openEditSheet, openLocationSheet, openInfoSheet } from './sheets.js';
 import { daysBetween, isBelowSafetyLine, shouldPromptSeasonEnd } from '../derive.js';
 import { localIsoDate } from '../date-utils.js';
 
@@ -56,9 +56,8 @@ export function render() {
   `;
 
   document.getElementById('settings-stove').innerHTML = `
-    <div class="settings-row" data-action="edit-stove"><span>愛機ストーブ</span><span class="v slab">${profile.stove.name} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
+    <div class="settings-row" data-action="open-stove-detail" data-return-type="settings"><span>愛機</span><span class="v slab">${profile.stove.name} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
     <div class="settings-row" data-action="edit-chimney"><span>次回煙突掃除予定日</span><span class="v">${profile.nextChimneyCleaning ?? '未設定'} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
-    <div class="settings-row" data-action="open-maintenance"><span>メンテナンス記録</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
   `;
 
   document.getElementById('settings-basic').innerHTML = `
@@ -145,13 +144,6 @@ export function editUsername() {
   });
 }
 
-// ストーブ名・購入日・触媒交換時期は、以前は設定画面の別々の行(別々のシート)に
-// 分かれていて何がどこにあるか分かりにくかったため、1つの「愛機ストーブ」情報として
-// まとめて編集できるようにしている
-export function editStove() {
-  openStoveEditSheet(() => render());
-}
-
 export function editSafetyLine() {
   const profile = getProfile();
   openEditSheet({
@@ -177,10 +169,6 @@ export function editSeasonTarget() {
       render();
     },
   });
-}
-
-export function openMaintenance() {
-  openMaintenanceSheet(() => render());
 }
 
 export async function toggleNotifications() {
