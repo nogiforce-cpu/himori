@@ -22,6 +22,11 @@ import { state } from '../state.js';
 import { localIsoDate } from '../date-utils.js';
 import { eventRowHtml } from './event-row.js';
 
+// 「強い冷え込み」とみなす最低気温の目安。日本の広い範囲で見て「明確に厳しい寒さ」と
+// 言える水準として-5℃を採用(0℃前後の通常の冬日まで拾うと毎日表示になり、
+// 「季節の気配」としての特別感が薄れてしまうため)。
+const COLD_SNAP_THRESHOLD = -5;
+
 // カレンダー・日別詳細の両方で使う「今の全記録」。呼ぶたびに毎回組み立てる薄い変換で、
 // 新しいイベントDBへ書き出したりはしない(ホームの「薪のある日々」と同じアダプター)。
 function allEvents() {
@@ -80,14 +85,18 @@ export function render() {
   const burnDates = new Set(burnLogs.map((b) => b.date));
   const maintDates = new Set(maintenanceLogs.map((m) => m.date));
   const photoDates = new Set(photos.map((p) => p.date));
-  // 薪割り・薪追加・薪棚チェックも「同じ暮らしの一部」として見えるよう、まとめて
-  // 1つの小さな緑ドットで示す(焚いた/メンテ/写真と並べて4種もアイコンを増やすと
-  // マスの中が煩雑になるため、種類ごとに分けず「薪仕事をした日」として1つにまとめる)。
-  const workDates = new Set([
-    ...woodAdditions.map((a) => a.date),
-    ...splitLogs.map((s) => s.date),
-    ...allChecks.map((c) => c.date),
-  ]);
+  // 薪割り・薪追加は「薪づくり」、薪棚チェックは「薪棚」として、それぞれ意味の伝わる
+  // 専用アイコンで示す(以前は1つの緑ドットにまとめていたが、凡例と対応する言葉を
+  // 用意できたので、混ぜずに分けた方が「何があった日か」が一目で伝わる)。
+  const woodworkDates = new Set([...woodAdditions.map((a) => a.date), ...splitLogs.map((s) => s.date)]);
+  const shelfCheckDates = new Set(allChecks.map((c) => c.date));
+  // 気温バッジ(毎日の数字)は出来事より目立ってしまうため廃止し、代わりに「季節の気配」
+  // だけを控えめな雪の結晶アイコンで示す: 実際に雪が観測された日、または強い冷え込み
+  // (最低気温-5℃以下)の日だけを対象にする(気象庁の実況が解決できた日のみ記録されるため、
+  // 全ての日を遡って判定できるわけではない)。
+  const snowDates = new Set(
+    weatherHistory.filter((w) => w.precipCategory === 'snow' || w.tempMin <= COLD_SNAP_THRESHOLD).map((w) => w.date)
+  );
   // 「良好」ではなかったチェックの日だけを特別扱いする(良好なチェックは日常の記録なので、
   // マスの中で毎回目立たせる必要はない → タップした日別詳細で見れば十分)。
   // 「要注意」「異常あり」はどちらも良好ではない状態としてまとめてマスの縁で示す。
@@ -107,20 +116,27 @@ export function render() {
     if (dateIso === lastBurn) classes.push('last-burn');
     if (warningCheckDates.has(dateIso)) classes.push('warn');
     // 色分けされたドットだけだと意味が伝わりにくいため、それぞれの出来事を表す小さな
-    // アイコンに置き換える(炎=焚いた、レンチ=メンテ、写真=撮影)。異常チェックはマス全体の
+    // HIMORI専用アイコンに置き換える(絵文字は使わない)。異常チェックはマス全体の
     // 赤いリングで表す(today/last-burnと同じ「特別な日はマスの縁で示す」パターンに統一)。
+    // 出来事アイコンを常に天気(雪)より先に並べ、「出来事 > 天気」の優先順位を保つ。
     const icons = [];
     if (burnDates.has(dateIso)) {
       icons.push('<svg class="icon ic-burn" viewBox="0 0 24 24"><use href="#i-flame"/></svg>');
     }
-    if (workDates.has(dateIso)) {
-      icons.push('<svg class="icon ic-work" viewBox="0 0 24 24"><use href="#i-plus"/></svg>');
+    if (woodworkDates.has(dateIso)) {
+      icons.push('<svg class="icon ic-woodwork" viewBox="0 0 24 24"><use href="#i-woodwork"/></svg>');
+    }
+    if (shelfCheckDates.has(dateIso)) {
+      icons.push('<svg class="icon ic-shelf" viewBox="0 0 24 24"><use href="#i-warehouse"/></svg>');
     }
     if (maintDates.has(dateIso)) {
       icons.push('<svg class="icon ic-maint" viewBox="0 0 24 24"><use href="#i-wrench"/></svg>');
     }
     if (photoDates.has(dateIso)) {
       icons.push('<svg class="icon ic-photo" viewBox="0 0 24 24"><use href="#i-image"/></svg>');
+    }
+    if (snowDates.has(dateIso)) {
+      icons.push('<svg class="icon ic-snow" viewBox="0 0 24 24"><use href="#i-snow"/></svg>');
     }
     // シーズン開始は炎アイコン(ブランドの炎モチーフ)、終了は天気アイコンと紛らわしい絵文字を避けて
     // 「終」の文字バッジで表す
@@ -133,15 +149,10 @@ export function render() {
         : dateIso === nextChimney
           ? '<span class="cal-season-mark cal-plan-mark">予定</span>'
           : '';
-    const w = weatherByDate.get(dateIso);
-    // セルの横幅が狭いため「最低:」を付けると崩れやすい。数字だけでも青バッジの
-    // 見た目で「気温(寒さの目安)」だと伝わるので、コンパクトさを優先する。
-    const tempHtml = w ? `<span class="cal-temp">${w.tempMin}℃</span>` : '';
     cells.push(`
       <div class="${classes.join(' ')}" data-action="open-cal-day" data-date="${dateIso}">
         <div class="cal-day-top"><span>${d}</span>${seasonMark}</div>
         <span class="cal-icons">${icons.join('')}</span>
-        ${tempHtml}
       </div>
     `);
   }
@@ -209,6 +220,61 @@ function lastYearSameDay(dateIso) {
   return localIsoDate(d);
 }
 
+const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
+// 「2026-08-18」より「8月18日(火)」の方が、その日を思い出しやすい。内部的な年月日は
+// dateIso自体をそのまま各所で持ち回っているので失われない。
+function dateHeadingLabel(dateIso) {
+  const d = new Date(dateIso + 'T00:00:00');
+  return `${d.getMonth() + 1}月${d.getDate()}日(${WEEKDAY_LABELS[d.getDay()]})`;
+}
+
+// その日が「季節の気配」として記憶に残りそうな気象だったかを、既存のweatherHistory
+// (実際に記録された最低気温・分かる範囲の降水種別)だけから判定する。新しい天気APIや
+// 複雑な予測は使わず、安全に分かる範囲だけを扱う。cycleStartは「今季」の起点
+// (前シーズン終了日。無ければ全期間)で、home.js等と同じ考え方を流用している。
+function weatherMilestoneNote(dateIso, weatherHistory, cycleStart) {
+  const entry = weatherHistory.find((w) => w.date === dateIso);
+  if (!entry) return null;
+  const inCycle = (d) => !cycleStart || d > cycleStart;
+  const priorInCycle = weatherHistory.filter((w) => w.date < dateIso && inCycle(w.date));
+  if (entry.precipCategory === 'snow') {
+    const hadSnowBefore = priorInCycle.some((w) => w.precipCategory === 'snow');
+    return hadSnowBefore ? '雪の日でした。' : '初雪の日でした。';
+  }
+  if (entry.tempMin <= COLD_SNAP_THRESHOLD) {
+    return `強い冷え込みでした(最低${entry.tempMin}℃)。`;
+  }
+  if (entry.tempMin < 10 && !priorInCycle.some((w) => w.tempMin < 10)) {
+    return `今季初めて、最低気温が一桁(${entry.tempMin}℃)になった日でした。`;
+  }
+  return null;
+}
+
+// 同じ日に同じ種類の記録(特に「今日、焚いた」や同じ種類のメンテ)が複数あると、実データ
+// としては正しくても見た目には重複に見えやすい。データそのものは変えず、表示だけ
+// 「(◯回記録)」としてまとめる。薪追加・薪棚チェック・薪割りは記録ごとに量や状態という
+// 意味のある違いを持つため、まとめずそれぞれ残す。
+function dedupeEvents(events) {
+  const indexByKey = new Map();
+  const result = [];
+  events.forEach((e) => {
+    const key = e.type === 'burn' ? 'burn' : e.type === 'maintenance' ? `maintenance:${e.text}` : null;
+    if (!key) {
+      result.push({ ...e });
+      return;
+    }
+    if (indexByKey.has(key)) {
+      const target = result[indexByKey.get(key)];
+      target.count = (target.count || 1) + 1;
+      if (e.photo && !target.photo) target.photo = e.photo;
+    } else {
+      indexByKey.set(key, result.length);
+      result.push({ ...e });
+    }
+  });
+  return result.map((e) => (e.count > 1 ? { ...e, text: `${e.text}(${e.count}回記録)` } : e));
+}
+
 // 「去年の今日」何をしていたかを一言で表す。シーズン開始/終了・メンテ記録があれば拾う
 // (焚いた/チェックなどの日常記録まで遡ると情報過多になるので、節目になる出来事だけに絞る)
 function lastYearHighlights(dateIso) {
@@ -258,14 +324,38 @@ export function openCalDay(dateIso) {
   const additions = getWoodAdditions().filter((a) => a.date === dateIso);
   const burns = getBurnLogs().filter((b) => b.date === dateIso);
   const maint = getMaintenanceLogs().filter((m) => m.date === dateIso);
-  const events = allEvents().filter((e) => e.date === dateIso);
+  const events = dedupeEvents(allEvents().filter((e) => e.date === dateIso));
   const isChimneyPlan = getProfile()?.nextChimneyCleaning === dateIso;
-  const seasonStart = getSeasons().find((s) => s.startDate === dateIso);
-  const seasonEnd = getSeasons().find((s) => s.endDate === dateIso);
+  const seasons = getSeasons();
+  const seasonStart = seasons.find((s) => s.startDate === dateIso);
+  const seasonEnd = seasons.find((s) => s.endDate === dateIso);
   const firstWoodType = firstWoodTypeDates(getWoodAdditions(), getPhotos());
   const newWoodTypeNames = Array.from(firstWoodType.entries())
     .filter(([, d]) => d === dateIso)
     .map(([name]) => name);
+  const cycleStart = seasons.filter((s) => s.endDate).slice(-1)[0]?.endDate ?? null;
+  const weatherNote = weatherMilestoneNote(dateIso, getWeatherHistory(), cycleStart);
+
+  // その日の「節目」をまとめて1箇所に集約する(以前は初焚き・シーズン締め・初めての樹種が
+  // それぞれ別のバナー枠で浮いて見えていた)。実績と紐づく節目は控えめな行として、
+  // まだ起きていない「予定」(煙突清掃日)だけは引き続き別枠のバナーで区別する。
+  const milestones = [];
+  if (seasonStart) {
+    milestones.push({ icon: '#i-flame', color: 'var(--ember)', text: '今季の初焚きです' });
+  }
+  if (seasonEnd) {
+    milestones.push({ icon: '#i-flame', text: '今シーズンを締めた日です' });
+  }
+  newWoodTypeNames.forEach((name) => {
+    milestones.push({
+      img: 'assets/icon-woodtype.png',
+      text: `${name}という樹種を初めて記録しました`,
+      action: `data-action="open-woodtype-detail" data-name="${name}" data-return-type="calendar-day" data-return-date="${dateIso}"`,
+    });
+  });
+  if (weatherNote) {
+    milestones.push({ icon: '#i-snow', color: 'var(--rain)', text: weatherNote });
+  }
 
   const sections = [];
   if (isChimneyPlan) {
@@ -273,21 +363,20 @@ export function openCalDay(dateIso) {
       `<div class="banner" style="margin:0 0 10px"><svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px"><use href="#i-wrench"/></svg><span>この日は煙突・触媒清掃の予定日です</span></div>`
     );
   }
-  if (seasonStart) {
+  if (milestones.length) {
     sections.push(
-      `<div class="banner" style="margin:0 0 10px"><svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--ember)"><use href="#i-flame"/></svg><span>今季の初焚きです</span></div>`
+      `<div class="label-sm" style="font-weight:700;margin-bottom:2px">この日の節目</div>` +
+        milestones
+          .map((m) => {
+            const iconHtml = m.img
+              ? `<img src="${m.img}" alt="" style="width:16px;height:16px;object-fit:contain;flex-shrink:0">`
+              : `<svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px;flex-shrink:0${m.color ? `;color:${m.color}` : ''}"><use href="${m.icon}"/></svg>`;
+            return `<div class="cal-milestone"${m.action ? ` ${m.action} style="cursor:pointer"` : ''}>${iconHtml}<span>${m.text}</span></div>`;
+          })
+          .join('') +
+        `<div style="height:6px"></div>`
     );
   }
-  if (seasonEnd) {
-    sections.push(
-      `<div class="banner" style="margin:0 0 10px"><span>今シーズンを締めた日です</span></div>`
-    );
-  }
-  newWoodTypeNames.forEach((name) => {
-    sections.push(
-      `<div class="banner" style="margin:0 0 10px;cursor:pointer" data-action="open-woodtype-detail" data-name="${name}" data-return-type="calendar-day" data-return-date="${dateIso}"><img src="assets/icon-woodtype.png" alt="" style="width:16px;height:16px;object-fit:contain"><span>${name}という樹種を初めて記録しました</span></div>`
-    );
-  });
   if (events.length) {
     // returnType:'calendar-day' を添えて、樹種詳細を閉じた時にこの日の詳細シートへ
     // そのまま戻れるようにする(カレンダー本体の月表示・スクロールには触れない)。
@@ -300,7 +389,7 @@ export function openCalDay(dateIso) {
   const lastYear = lastYearHighlights(dateIso);
   if (lastYear.length) {
     sections.push(
-      `<div class="label-sm" style="font-weight:700;margin:14px 0 4px">去年の今日(${lastYearSameDay(dateIso)})</div>` +
+      `<div class="label-sm" style="font-weight:700;margin:14px 0 4px">去年の今日(${dateHeadingLabel(lastYearSameDay(dateIso))})</div>` +
         lastYear.map((h) => `<div class="history-row"><span>${h}</span><span></span></div>`).join('')
     );
   }
@@ -308,7 +397,7 @@ export function openCalDay(dateIso) {
   openOverlay(`
     <div class="sheet">
       <div class="row" style="margin-bottom:10px">
-        <span class="sheet-title" style="margin-bottom:0">${dateIso}</span>
+        <span class="sheet-title" style="margin-bottom:0">${dateHeadingLabel(dateIso)}</span>
         <button class="iconbtn" data-action="close-overlay"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button>
       </div>
       ${sections.length ? sections.join('') : '<div class="empty">この日の記録はありません。</div>'}

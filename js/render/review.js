@@ -67,9 +67,12 @@ export function render() {
     checks: getChecks(),
   });
 
+  // ホームの「ひとこと」と同じ太さ・大きさにして、数字より先に文章が主役として
+  // 目に入るようにする(以前は本文と同じ弱いウェイトで、下のstat-gridの太字の数字の
+  // 方が視覚的に目立ってしまっていた)。
   document.getElementById('review-summary').innerHTML = `
     <div class="label-sm" style="margin-bottom:6px">今週のまとめ</div>
-    <div style="font-size:calc(13px * var(--font-scale));line-height:1.7">${summaryText(stats, isOffSeason(burnLogs))}</div>
+    <div style="font-size:calc(14px * var(--font-scale));font-weight:600;line-height:1.7">${summaryText(stats, isOffSeason(burnLogs))}</div>
   `;
 
   const deltaColor = stats.anshinDelta > 0 ? 'var(--green)' : stats.anshinDelta < 0 ? 'var(--red)' : 'var(--cream)';

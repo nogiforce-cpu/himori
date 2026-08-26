@@ -77,6 +77,10 @@ svg.icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;s
 .event-row .thumb.icon{background:rgba(154,196,106,.14);display:flex;align-items:center;justify-content:center}
 .event-row .thumb.icon svg,.event-row .thumb.icon img{width:18px;height:18px;object-fit:contain}
 .event-row .text{flex:1;min-width:0;font-size:calc(13px * var(--font-scale))}
+/* 日別詳細の「この日の節目」: event-rowより軽い、箱に入れない一行の記述。実績としての
+   節目(初焚き・初雪など)を、警告バナーと同じ強さで並べてしまわないようにするための
+   専用スタイル。 */
+.cal-milestone{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:calc(13px * var(--font-scale));line-height:1.5}
 .row{display:flex;justify-content:space-between;align-items:center}
 .label-sm{font-size:calc(12px * var(--font-scale));color:var(--khaki)}
 .progress{height:6px;background:var(--surface);border-radius:3px;overflow:hidden;margin-top:6px}
@@ -284,9 +288,8 @@ textarea.box{width:100%;border:0;resize:none;font-family:inherit;color:var(--cre
    大きくして気づきやすくする。 */
 .cal-day .cal-icons .ic-maint{color:var(--bg);background:var(--green);border-radius:4px;padding:2px;width:15px;height:15px}
 .cal-day .cal-icons .ic-photo{color:var(--muted)}
-.cal-day .cal-icons .ic-work{color:var(--khaki)}
-/* 薪ストーブは「冷え込んだ時に焚く」ものなので、最高気温より最低気温の方が実用的。
-   最低気温だけを、寒さが一目でわかる青いバッジに白抜き文字で表示する。 */
-.cal-day .cal-temp{display:inline-block;align-self:center;font-size:calc(9px * var(--font-scale));font-weight:700;color:var(--cream);background:var(--rain);border-radius:3px;padding:1px 5px;margin-top:3px;white-space:nowrap}
+.cal-day .cal-icons .ic-woodwork{color:var(--khaki)}
+.cal-day .cal-icons .ic-shelf{color:var(--green)}
+.cal-day .cal-icons .ic-snow{color:var(--rain)}
 
 .main-tag{font-size:calc(9px * var(--font-scale));font-weight:700;color:var(--green);border:1px solid rgba(154,196,106,.4);padding:2px 6px;border-radius:4px;margin-left:6px;white-space:nowrap;display:inline-block}

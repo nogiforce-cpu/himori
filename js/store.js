@@ -285,6 +285,9 @@ export function setWeatherCache(cache) {
 export function getWeatherHistory() {
   return readJSON(KEYS.weatherHistory, []);
 }
+// precipCategory(雪/雨の実況種別)は気象庁の発表が解決できた日だけ分かるため、
+// 常にnullを埋めるのではなく分かった時だけ記録する(既存の古い記録にはこの
+// フィールドが無いが、カレンダー側は無いものとして安全にフォールバックする)。
 export function recordWeatherHistoryToday(todayWeather) {
   const list = getWeatherHistory();
   const idx = list.findIndex((e) => e.date === todayWeather.date);
@@ -292,6 +295,7 @@ export function recordWeatherHistoryToday(todayWeather) {
     date: todayWeather.date,
     tempMin: Math.round(todayWeather.tempMin),
     tempMax: Math.round(todayWeather.tempMax),
+    ...(todayWeather.precipCategory ? { precipCategory: todayWeather.precipCategory } : {}),
   };
   if (idx === -1) list.push(entry);
   else list[idx] = entry;

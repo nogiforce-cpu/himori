@@ -267,18 +267,22 @@ export function weeklyStats(range, { burnLogs, woodAdditions, anshinHistory, spl
 }
 
 export function summaryText(stats, offSeason) {
+  const madeWood = stats.splitCount > 0 || stats.additionsCount > 0;
   // オフシーズン中は「0回焚きました」が当然の結果になり違和感があるため、焚いていない週は
-  // シーズン中かどうかで文言を出し分ける(チェックだけ実施していれば冬支度の進捗として触れる)。
+  // シーズン中かどうかで文言を出し分ける。薪割り・薪追加があった週は、それを「次の冬への
+  // 準備が進んでいる」という前向きな進捗として真っ先に伝える(0回=失敗に見せないため)。
   if (offSeason && stats.burnCount === 0) {
+    if (madeWood) return '今週は火を焚きませんでしたが、次の冬へ向けて薪の準備が進んでいます。';
     return stats.checksInWeek.length > 0
       ? 'オフシーズンですが、薪棚チェックをして冬支度を進められました。'
       : '今はオフシーズンのようです。次のシーズンに向けて薪棚を整えておくと安心です。';
   }
-  if (stats.burnCount === 0 && stats.checksInWeek.length === 0) {
+  if (stats.burnCount === 0 && stats.checksInWeek.length === 0 && !madeWood) {
     return 'この週の記録はまだありません。焚いたら「今日、焚いた」をタップして残しておきましょう。';
   }
   const parts = [];
-  parts.push(`今週は${stats.burnCount}回焚きました。`);
+  if (stats.burnCount > 0) parts.push(`今週は${stats.burnCount}回、火を焚きました。`);
+  else if (madeWood) parts.push('今週は火を焚く日はありませんでしたが、薪づくりを進められました。');
   if (stats.anshinDelta != null) {
     if (stats.anshinDelta > 0) parts.push(`薪の充足率は先週より${stats.anshinDelta}%上がっています。`);
     else if (stats.anshinDelta < 0) parts.push(`薪の充足率は先週より${Math.abs(stats.anshinDelta)}%下がっています。`);
