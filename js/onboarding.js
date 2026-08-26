@@ -65,8 +65,8 @@ function showWelcome(onDone, offset = 0) {
   const ov = shell({
     step: 1 + offset,
     total: 6 + offset,
-    title: '<svg class="icon" viewBox="0 0 24 24" style="width:20px;height:20px;vertical-align:-4px;margin-right:4px;color:var(--ember)"><use href="#i-flame"/></svg>火守 / HIMORIへようこそ',
-    body: '薪ストーブの残量管理・乾燥チェック・季節の振り返りができるノートです。使い始める前に、いくつか質問させてください(すべて後からでも変更・スキップできます)。',
+    title: '<svg class="icon" viewBox="0 0 24 24" style="width:20px;height:20px;vertical-align:-4px;margin-right:4px;color:var(--ember)"><use href="#i-flame"/></svg>火守 HIMORIへようこそ',
+    body: '火のある暮らしを育てる、薪ストーブのノートです。使い始める前に、いくつか質問させてください(すべて後からでも変更・スキップできます)。',
     primaryLabel: 'はじめる',
   });
   ov.querySelector('#ob-primary').addEventListener('click', () => showUsername(onDone, offset));
@@ -97,7 +97,7 @@ function showStove(onDone, offset = 0) {
     step: 3 + offset,
     total: 6 + offset,
     title: 'お使いのストーブは?',
-    body: 'メンテナンス記録などで表示される、愛機の名前です(任意)。',
+    body: '愛機の詳細画面などで表示される、ストーブの名前です(任意)。',
     contentHtml: `<div class="field"><input class="box" id="ob-stove" placeholder="例: Jøtul F 400" value="${profile.stove.name}"></div>`,
     primaryLabel: '次へ',
     secondaryLabel: 'スキップ',

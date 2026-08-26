@@ -36,6 +36,7 @@ import {
   nextCheckState,
   resolvePhotoShelfId,
   monthDayLabel,
+  shelfStatusLabel,
   firstWoodTypeDates,
   stoveYears,
   firstBurnDate,
@@ -117,14 +118,20 @@ export function wirePercentSlider(root, id) {
 
 // ---- 汎用: 写真を拡大して見るだけ(差し替え・削除はしない) ----
 // 満タン写真と今の薪棚を見比べる時など、「タップしたら差し替わってしまう」事故を避けつつ
-// 大きく見たいだけの場面で使う軽量シート。
-export function openPhotoZoomSheet(uri) {
-  openOverlay(`
+// 大きく見たいだけの場面で使う軽量シート。onClose(省略可)は、他の詳細シートの中から
+// 開いた場合に、閉じたら元の詳細シートへ戻れるようにするための戻り先コールバック
+// (省略時は従来通り、閉じたら下の画面がそのまま見える)。
+export function openPhotoZoomSheet(uri, onClose) {
+  const ov = openOverlay(`
     <div class="sheet">
-      <div class="row" style="margin-bottom:10px"><span class="sheet-title" style="margin-bottom:0">写真を見る</span><button class="iconbtn" data-action="close-overlay"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></div>
+      <div class="row" style="margin-bottom:10px"><span class="sheet-title" style="margin-bottom:0">写真を見る</span><button class="iconbtn" id="photo-zoom-close"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></div>
       <div class="photo-ph" style="height:min(70vh,420px)"><img src="${uri}" alt="" style="width:100%;height:100%;object-fit:contain"></div>
     </div>
   `);
+  ov.querySelector('#photo-zoom-close').addEventListener('click', () => {
+    closeOverlay();
+    onClose && onClose();
+  });
 }
 
 // ---- 汎用: 薪棚の総容量入力(直接入力 or 寸法から自動計算) ----
@@ -1183,7 +1190,7 @@ export function openShelfEditSheet(shelfId, onSaved) {
       <div class="field">
         <label>乾燥状態(ご自身の判断で選んでください)</label>
         <select class="box" id="shelf-edit-status">
-          ${statuses.map((s) => `<option value="${s}" ${s === shelf.status ? 'selected' : ''}>${s}</option>`).join('')}
+          ${statuses.map((s) => `<option value="${s}" ${s === shelf.status ? 'selected' : ''}>${shelfStatusLabel(s)}</option>`).join('')}
         </select>
       </div>
       <div class="field">
@@ -1263,7 +1270,7 @@ export function openAddShelfSheet(onSaved) {
         <label>乾燥状態</label>
         <select class="box" id="new-shelf-status">
           <option value="乾燥中">乾燥中</option>
-          <option value="乾燥済み">乾燥済み</option>
+          <option value="乾燥済み">乾燥薪</option>
           <option value="来季用">来季用</option>
         </select>
       </div>
@@ -1494,7 +1501,15 @@ export function openStoveDetailSheet(onClose = () => {}) {
     ov.querySelector('#stove-edit-open-btn').addEventListener('click', () => {
       openStoveEditSheet(() => openStoveDetailSheet(onClose));
     });
+    // 写真がある時は「見る(拡大)」、無い時だけ「タップして追加」にする。以前は写真の
+    // 有無に関わらずタップ=即差し替えだったため、「見たいだけ」のつもりが誤って
+    // 写真選択を開いてしまう可能性があった(見る/操作の分離。差し替えは鉛筆アイコンの
+    // 編集シートから行う)。
     ov.querySelector('#stove-detail-photo').addEventListener('click', async () => {
+      if (photo) {
+        openPhotoZoomSheet(photo.uri, () => openStoveDetailSheet(onClose));
+        return;
+      }
       const file = await pickImageFile();
       if (!file) return;
       const uri = await fileToResizedDataUrl(file);

@@ -414,9 +414,13 @@ export function render() {
       </div>
     `);
   }
+  // 以前は赤背景+「下回っています」という不足を強調する見た目だったが、薪をまだ
+  // 十分に貯められていない新規ユーザーほど常時この警告色を目にすることになり、
+  // 「不足・不安を煽らない」という方針と矛盾していた。他の一般的なお知らせと同じ
+  // 落ち着いた色に揃え、文面も「そろそろ」という目安の言い方に和らげる。
   if (shelves.length > 0 && isBelowSafetyLine(shelves, profile.safetyLineM3)) {
     banners.push(
-      `<div class="banner" style="background:rgba(181,80,46,.14);border-color:rgba(181,80,46,.4)"><svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--red)"><use href="#i-info"/></svg><span>使える薪の合計が安心ライン(${profile.safetyLineM3}m³)を下回っています。</span></div>`
+      `<div class="banner"><svg class="icon" viewBox="0 0 24 24" style="width:16px;height:16px"><use href="#i-info"/></svg><span>使える薪が安心ライン(${profile.safetyLineM3}m³)の目安を下回っています。そろそろ補充を考えるタイミングです。</span></div>`
     );
   }
   // 「薪を多めに運んでおくと安心」は焚いているシーズンでこそ意味があるアドバイスなので、
