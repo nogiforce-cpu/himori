@@ -369,7 +369,16 @@ export function buildLivingWithWoodEvents({ shelves, woodAdditions, splitLogs, c
     events.push({ date: b.date, type: 'burn', icon: '#i-flame', iconColor: 'var(--ember)', photo: null, shelfId: b.shelfId, text: '今日、火を焚きました' });
   });
   woodAdditions.forEach((a) => {
-    events.push({ date: a.date, type: 'addition', icon: '#i-plus', iconColor: 'var(--green)', photo: takePhoto(a.photoId), shelfId: a.shelfId, text: `${shelfName(a.shelfId)}に${a.addedVolumeM3}m³追加` });
+    events.push({
+      date: a.date,
+      type: 'addition',
+      icon: '#i-plus',
+      iconColor: 'var(--green)',
+      photo: takePhoto(a.photoId),
+      shelfId: a.shelfId,
+      woodType: a.woodType || null,
+      text: `${shelfName(a.shelfId)}に${a.addedVolumeM3}m³追加`,
+    });
   });
   splitLogs.forEach((s) => {
     events.push({ date: s.date, type: 'split', img: 'assets/icon-axe.png', photo: null, shelfId: null, text: s.volumeM3 ? `薪割りをしました(${s.volumeM3}m³)` : '薪割りをしました' });

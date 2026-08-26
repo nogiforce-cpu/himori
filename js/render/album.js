@@ -8,9 +8,13 @@ function monthLabel(dateIso) {
   return `${d.getFullYear()}年${d.getMonth() + 1}月`;
 }
 
-// 写真1枚の見出し(薪棚名、なければカテゴリ)と日付。「いつ・どの薪棚か」だけを添えて、
-// 出来事の詳細はタップ後の写真シート・カレンダーの日別詳細に譲る(アルバムは写真が主役)。
+// 写真1枚の見出し(薪棚名、樹種写真なら樹種名、どちらも無ければカテゴリ)と日付。
+// 「いつ・どこ/何の写真か」だけを添えて、出来事の詳細はタップ後の写真シート・
+// カレンダーの日別詳細に譲る(アルバムは写真が主役)。
 function photoCaption(photo, shelves, woodAdditions) {
+  if (photo.category === '樹種' && photo.woodType) {
+    return { name: photo.woodType, date: monthDayLabel(photo.date) };
+  }
   const shelfId = resolvePhotoShelfId(photo.id, shelves, woodAdditions);
   const shelf = shelfId ? shelves.find((s) => s.id === shelfId) : null;
   return { name: shelf ? shelf.name : photo.category, date: monthDayLabel(photo.date) };

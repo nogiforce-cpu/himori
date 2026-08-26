@@ -285,7 +285,7 @@ export function openCalDay(dateIso) {
   }
   newWoodTypeNames.forEach((name) => {
     sections.push(
-      `<div class="banner" style="margin:0 0 10px"><img src="assets/icon-woodtype.png" alt="" style="width:16px;height:16px;object-fit:contain"><span>${name}という樹種を初めて記録しました</span></div>`
+      `<div class="banner" style="margin:0 0 10px;cursor:pointer" data-action="open-woodtype-detail" data-name="${name}"><img src="assets/icon-woodtype.png" alt="" style="width:16px;height:16px;object-fit:contain"><span>${name}という樹種を初めて記録しました</span></div>`
     );
   });
   if (events.length) {

@@ -5,7 +5,7 @@ import * as review from './render/review.js';
 import * as album from './render/album.js';
 import * as settings from './render/settings.js';
 import * as calendar from './render/calendar.js';
-import { openAddWoodModal, openAddShelfSheet, openWoodTypeCollectionSheet, openInfoSheet } from './render/sheets.js';
+import { openAddWoodModal, openAddShelfSheet, openWoodTypeCollectionSheet, openWoodTypeDetailSheet, openInfoSheet } from './render/sheets.js';
 import { seedIfEmpty, getProfile, getShelves, getNotificationHistory } from './store.js';
 import { ensureWeatherFresh, maybeNotifyWeather, maybeNotifyChimney, maybeNotifyShelfCheck } from './weather.js';
 import { maybeStartOnboarding } from './onboarding.js';
@@ -166,6 +166,7 @@ function wireStatic() {
 const ACTIONS = {
   'open-add-shelf': () => openAddShelfSheet(renderAll),
   'open-woodtypes': () => openWoodTypeCollectionSheet(),
+  'open-woodtype-detail': (el) => openWoodTypeDetailSheet(el.dataset.name),
   'toggle-weather-detail': () => home.toggleWeatherDetail(),
   'open-shelf-check': (el) => shelves.openShelfCheck(el.dataset.shelfId),
   'edit-shelf-from-list': (el) => shelves.editShelfFromList(el.dataset.shelfId),

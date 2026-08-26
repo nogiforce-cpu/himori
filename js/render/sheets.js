@@ -17,6 +17,8 @@ import {
   getWoodTypeCatalog,
   addWoodTypeToCatalog,
   deleteWoodTypeFromCatalog,
+  getWoodTypeDetail,
+  updateWoodTypeDetail,
   getMaintenanceLogs,
   addMaintenanceLog,
   updateMaintenanceLog,
@@ -33,6 +35,7 @@ import {
   nextCheckState,
   resolvePhotoShelfId,
   monthDayLabel,
+  firstWoodTypeDates,
 } from '../derive.js';
 import { localIsoDate } from '../date-utils.js';
 import { pickImageFile, fileToResizedDataUrl } from '../photos.js';
@@ -40,6 +43,7 @@ import { resolveLocationFromCity, fetchCitiesForPrefecture, PREFECTURES } from '
 import { listRegionsForOffice } from '../jma.js';
 import { state } from '../state.js';
 import { focusOnDate } from './calendar.js';
+import { eventRowHtml } from './event-row.js';
 
 // ---- 汎用: 写真1枚の登録・差し替えフィールド ----
 // 薪棚・薪ストーブ・メンテ記録など、写真を持つあらゆる記録の編集シートから
@@ -456,114 +460,325 @@ function normalizeWoodName(name) {
   return WOOD_NAME_KANJI_ALIASES[trimmed] || trimmed;
 }
 
-// ---- 樹種コレクション(追加・削除できる、写真付きの図鑑) ----
+// ---- 樹種コレクション(「自分だけの薪図鑑」。一般情報 + 自分の記録・メモ・任意評価) ----
+
+function countFor(name) {
+  const shelves = getShelves();
+  const additions = getWoodAdditions();
+  let count = shelves.filter((s) => s.woodTypes.includes(name)).length;
+  count += additions.filter((a) => a.woodType === name).length;
+  return count;
+}
+
+// 代表写真: 直接登録した樹種写真があればそれを優先し、無ければその樹種を追加した記録・
+// その樹種を含む薪棚の写真を代表写真として拝借する(伐採・薪割りの様子の写真もここに活きる)。
+function photoFor(name) {
+  const photos = getPhotos();
+  const direct = photos.filter((p) => p.category === '樹種' && p.woodType === name).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+  if (direct) return direct;
+  const addition = getWoodAdditions().find((a) => a.woodType === name && a.photoId);
+  if (addition) {
+    const photo = photos.find((p) => p.id === addition.photoId);
+    if (photo) return photo;
+  }
+  const shelf = getShelves().find((s) => s.woodTypes.includes(name) && s.photoIds.length);
+  if (shelf) {
+    const photo = photos.find((p) => p.id === shelf.photoIds[shelf.photoIds.length - 1]);
+    if (photo) return photo;
+  }
+  return null;
+}
+
+function yearMonthLabel(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  return `${d.getFullYear()}年${d.getMonth() + 1}月`;
+}
+
+// 「最近出会った樹種順」: 初めて記録した日が新しい順。まだ一度も使っていない
+// (薪追加・写真のどちらも無い)樹種は末尾へ回す。
+function sortedCatalogNames(catalog, firstDates) {
+  return catalog.slice().sort((a, b) => {
+    const da = firstDates.get(a);
+    const db = firstDates.get(b);
+    if (da && db) return da < db ? 1 : da > db ? -1 : 0;
+    if (da) return -1;
+    if (db) return 1;
+    return 0;
+  });
+}
+
+// 自分の評価は「割りやすさ・火付き・火持ち」の3項目だけに絞り、★5評価のような
+// レビューサイト風UIにはしない。いずれも任意で、未設定を「未評価」と表示しない。
+const RATING_FIELDS = [
+  { key: 'splitEase', label: '割りやすさ', options: ['割りやすい', 'ふつう', '割りにくい'] },
+  { key: 'catchability', label: '火付き', options: ['良い', 'ふつう', 'イマイチ'] },
+  { key: 'burnDuration', label: '火持ち', options: ['良い', 'ふつう', '短め'] },
+];
+function ratingRowHtml(field, currentValue) {
+  return `
+    <div class="field">
+      <label>${field.label}(任意)</label>
+      <div class="filter-tabs" data-rating-key="${field.key}" style="margin-bottom:0">
+        ${field.options
+          .map((opt) => `<button type="button" class="${currentValue === opt ? 'active' : ''}" data-value="${opt}">${opt}</button>`)
+          .join('')}
+      </div>
+    </div>
+  `;
+}
+// 選択済みの値をもう一度タップすると未設定に戻せる(「必ず何か選ぶ」フォームにしない)。
+function wireRatingRow(root, key, onChange) {
+  const row = root.querySelector(`[data-rating-key="${key}"]`);
+  if (!row) return;
+  row.querySelectorAll('button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const wasActive = btn.classList.contains('active');
+      row.querySelectorAll('button').forEach((b) => b.classList.remove('active'));
+      if (!wasActive) btn.classList.add('active');
+      onChange(wasActive ? null : btn.dataset.value);
+    });
+  });
+}
+
+// 樹種コレクション一覧: 「登録件数」ではなく「出会った樹種」の感覚を大切にし、写真を
+// 主役に据える。カード自体をタップすると詳細(一般情報+自分の記録)へ進む(削除などの
+// 操作はカードから外し、詳細画面の設定領域へ集約している)。
 export function openWoodTypeCollectionSheet() {
-  function countFor(name) {
-    const shelves = getShelves();
-    const additions = getWoodAdditions();
-    let count = shelves.filter((s) => s.woodTypes.includes(name)).length;
-    count += additions.filter((a) => a.woodType === name).length;
-    return count;
-  }
-
-  // 「コレクション」という名前にふさわしく、写真付きの図鑑にする。直接登録した写真が
-  // あればそれを優先し、無ければその樹種を追加した記録・その樹種を含む薪棚の写真を
-  // 代表写真として拝借する(伐採・薪割りの様子の写真もここに活きてくる)。
-  function photoFor(name) {
-    const photos = getPhotos();
-    const direct = photos.filter((p) => p.category === '樹種' && p.woodType === name).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
-    if (direct) return direct;
-    const addition = getWoodAdditions().find((a) => a.woodType === name && a.photoId);
-    if (addition) {
-      const photo = photos.find((p) => p.id === addition.photoId);
-      if (photo) return photo;
-    }
-    const shelf = getShelves().find((s) => s.woodTypes.includes(name) && s.photoIds.length);
-    if (shelf) {
-      const photo = photos.find((p) => p.id === shelf.photoIds[shelf.photoIds.length - 1]);
-      if (photo) return photo;
-    }
-    return null;
-  }
-
   function draw() {
     const catalog = getWoodTypeCatalog();
     const ov = document.querySelector('[data-dynamic-overlay="true"]');
     if (!ov) return;
+    const countEl = ov.querySelector('#woodtype-count');
+    if (countEl) countEl.textContent = `出会った樹種 ${catalog.length}種`;
+    const firstDates = firstWoodTypeDates(getWoodAdditions(), getPhotos());
     ov.querySelector('#woodtype-list').innerHTML = catalog.length
-      ? `<div class="collection-grid">${catalog
+      ? `<div class="collection-grid">${sortedCatalogNames(catalog, firstDates)
           .map((name) => {
             const photo = photoFor(name);
             const emptyClass = photo ? '' : ' empty';
             const inner = photo ? `<img src="${photo.uri}" alt="">` : EMPTY_PHOTO_INNER;
-            const photoHtml = `<div class="photo-ph${emptyClass}" data-action="add-woodtype-photo" data-name="${name}" style="height:70px;margin-bottom:6px;cursor:pointer">${inner}</div>`;
+            const firstDate = firstDates.get(name);
+            const detail = getWoodTypeDetail(name);
             return `
-        <div class="collection-card">
-          ${photoHtml}
-          <div class="row" style="align-items:flex-start">
-            <div style="font-size:calc(13px * var(--font-scale));font-weight:700">${name}</div>
-            <button class="iconbtn" style="width:24px;height:24px;flex-shrink:0" data-action="delete-woodtype" data-name="${name}"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-x"/></svg></button>
-          </div>
+        <div class="collection-card" data-action="open-woodtype-detail" data-name="${name}" style="cursor:pointer">
+          <div class="photo-ph${emptyClass}" style="height:90px;margin-bottom:2px">${inner}</div>
+          <div style="font-size:calc(13px * var(--font-scale));font-weight:700">${name}</div>
+          ${firstDate ? `<div class="label-sm">初めて記録:${yearMonthLabel(firstDate)}</div>` : ''}
+          ${detail.memo ? `<div class="label-sm" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${detail.memo}</div>` : ''}
           <div class="n">${countFor(name)}回記録</div>
-          ${WOOD_TRIVIA[normalizeWoodName(name)] ? `<div class="label-sm" style="margin-top:2px;line-height:1.5">${WOOD_TRIVIA[normalizeWoodName(name)]}</div>` : ''}
         </div>`;
           })
           .join('')}</div>`
-      : `<div class="empty">まだ樹種が登録されていません。下から追加できます。</div>`;
-    ov.querySelectorAll('[data-action="delete-woodtype"]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        deleteWoodTypeFromCatalog(btn.dataset.name);
-        draw();
-      });
-    });
-    ov.querySelectorAll('[data-action="add-woodtype-photo"]').forEach((box) => {
-      box.addEventListener('click', async () => {
-        const file = await pickImageFile();
-        if (!file) return;
-        const uri = await fileToResizedDataUrl(file);
-        try {
-          addPhoto({ category: '樹種', date: todayIso(), uri, woodType: box.dataset.name });
-          draw();
-        } catch {
-          showToast('保存に失敗しました。写真の保存容量が上限に近づいている可能性があります');
-        }
-      });
+      : `
+        <div class="empty">まだ樹種の記録がありません。薪を追加したり、ここから記録すると、出会った樹種が並んでいきます。</div>
+        <button class="btn-primary" id="woodtype-empty-cta">＋ 最初の樹種を記録する</button>
+      `;
+    ov.querySelector('#woodtype-empty-cta')?.addEventListener('click', () => {
+      openAddWoodTypeSheet(() => openWoodTypeCollectionSheet());
     });
   }
 
   const ov = openOverlay(`
     <div class="sheet">
-      <div class="row" style="margin-bottom:10px">
+      <div class="row" style="margin-bottom:2px">
         <span class="sheet-title" style="margin-bottom:0">樹種コレクション</span>
-        <button class="iconbtn" data-action="close-overlay"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button>
-      </div>
-      <div id="woodtype-list" style="margin-bottom:12px"></div>
-      <div class="field" style="display:flex;gap:8px;align-items:flex-end">
-        <div style="flex:1">
-          <label>樹種を追加</label>
-          <input class="box" id="woodtype-new" placeholder="例: クヌギ">
+        <div style="display:flex;gap:6px">
+          <button class="iconbtn" id="woodtype-add-open-btn"><svg class="icon" viewBox="0 0 24 24"><use href="#i-plus"/></svg></button>
+          <button class="iconbtn" data-action="close-overlay"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button>
         </div>
-        <button class="btn-ghost" style="flex:none;padding:11px 16px" id="woodtype-add-btn">追加</button>
       </div>
+      <div class="label-sm" id="woodtype-count" style="margin-bottom:12px"></div>
+      <div id="woodtype-list" style="margin-bottom:12px"></div>
     </div>
   `);
-  const addFromInput = () => {
-    const input = ov.querySelector('#woodtype-new');
-    const name = input.value.trim();
-    if (!name) return;
+  ov.querySelector('#woodtype-add-open-btn').addEventListener('click', () => {
+    openAddWoodTypeSheet(() => openWoodTypeCollectionSheet());
+  });
+  draw();
+}
+
+// 樹種を記録する: 「写真→樹種名→保存」の最短フローを基本にし、メモは任意で
+// 折りたたんでおく(登録は数十秒で終わることを最優先する。割りやすさ等の評価は、
+// 実際に使ってみてからの方が書けることが多いため、この時点では扱わず詳細画面に譲る)。
+export function openAddWoodTypeSheet(onSaved) {
+  let photoDataUrl = null;
+  const ov = openOverlay(`
+    <div class="sheet">
+      <div class="row" style="margin-bottom:10px">
+        <span class="sheet-title" style="margin-bottom:0">樹種を記録する</span>
+        <button class="iconbtn" data-action="close-overlay"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="photo-ph empty" id="newwt-photo-ph" style="height:150px;margin-bottom:12px;cursor:pointer">${EMPTY_PHOTO_INNER}</div>
+      <div class="field">
+        <label>樹種名</label>
+        <input class="box" id="newwt-name" placeholder="例: クヌギ">
+      </div>
+      <button class="link-btn" id="newwt-toggle-detail" style="padding:0 0 10px">詳しく記録する(任意)</button>
+      <div class="field" id="newwt-detail" style="display:none">
+        <label>メモ</label>
+        <textarea class="box" id="newwt-memo" placeholder="例: 割った時に香りが強かった"></textarea>
+      </div>
+      <button class="btn-primary" id="newwt-save-btn">保存する</button>
+    </div>
+  `);
+  ov.querySelector('#newwt-photo-ph').addEventListener('click', async () => {
+    const file = await pickImageFile();
+    if (!file) return;
+    photoDataUrl = await fileToResizedDataUrl(file);
+    const box = ov.querySelector('#newwt-photo-ph');
+    box.classList.remove('empty');
+    box.innerHTML = `<img src="${photoDataUrl}" alt="">`;
+  });
+  ov.querySelector('#newwt-toggle-detail').addEventListener('click', () => {
+    const el = ov.querySelector('#newwt-detail');
+    el.style.display = el.style.display === 'none' ? '' : 'none';
+  });
+  const save = () => {
+    const name = ov.querySelector('#newwt-name').value.trim();
+    if (!name) {
+      showToast('樹種名を入力してください');
+      return;
+    }
+    const isNew = !getWoodTypeCatalog().includes(name);
+    const memo = ov.querySelector('#newwt-memo').value.trim();
     addWoodTypeToCatalog(name);
-    input.value = '';
-    draw();
+    if (memo) updateWoodTypeDetail(name, { memo });
+    try {
+      if (photoDataUrl) addPhoto({ category: '樹種', date: todayIso(), uri: photoDataUrl, woodType: name });
+    } catch {
+      showToast('写真の保存に失敗しました。保存容量が上限に近づいている可能性があります');
+    }
+    closeOverlay();
+    showToast(isNew ? `${name}を初めて記録しました` : `${name}の記録を更新しました`);
+    onSaved && onSaved();
   };
-  ov.querySelector('#woodtype-add-btn').addEventListener('click', addFromInput);
-  // スマホのキーボードで「完了/Go」を押した時にも追加できるよう、Enterキーにも対応する
-  // (ボタンを明示的にタップしないと反応しないと「押しても効かない」ように感じられるため)
-  ov.querySelector('#woodtype-new').addEventListener('keydown', (e) => {
+  ov.querySelector('#newwt-save-btn').addEventListener('click', save);
+  // スマホのキーボードで「完了/Go」を押した時にも保存できるようにする
+  ov.querySelector('#newwt-name').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      addFromInput();
+      save();
     }
   });
+}
+
+// 樹種詳細: 「一般情報を見る場所」+「自分の経験を振り返る場所」。上から代表写真→
+// 初めて記録した時期→一般的な特徴(既存のWOOD_TRIVIAのみ、新しい一般情報は増やさない)→
+// 自分の記録(薪追加の履歴)→写真→自分のメモ・評価、という順で並べ、削除だけ最下部の
+// 設定領域に分離する(見る/操作の分離。薪棚チェック画面と同じ考え方)。
+export function openWoodTypeDetailSheet(name) {
+  function draw() {
+    const ov = document.querySelector('[data-dynamic-overlay="true"]');
+    if (!ov) return;
+    const detail = getWoodTypeDetail(name);
+    const allPhotos = getPhotos();
+    const speciesPhotos = allPhotos.filter((p) => p.category === '樹種' && p.woodType === name);
+    const additions = getWoodAdditions()
+      .filter((a) => a.woodType === name)
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+    const shelves = getShelves();
+    const shelfName = (id) => shelves.find((s) => s.id === id)?.name ?? '薪棚';
+    const firstDate = firstWoodTypeDates(getWoodAdditions(), getPhotos()).get(name);
+    const trivia = WOOD_TRIVIA[normalizeWoodName(name)];
+    const repPhoto = photoFor(name);
+
+    const additionsHtml = additions.length
+      ? additions
+          .map((a) => {
+            const photo = a.photoId ? allPhotos.find((p) => p.id === a.photoId) : null;
+            return eventRowHtml(
+              { icon: '#i-plus', iconColor: 'var(--green)', photo, text: `${shelfName(a.shelfId)}に${a.addedVolumeM3}m³追加` },
+              monthDayLabel(a.date)
+            );
+          })
+          .join('')
+      : `<div class="empty" style="padding:10px 4px">まだ薪追加の記録はありません。</div>`;
+
+    const photosHtml = speciesPhotos.length
+      ? `<div class="album-grid">${speciesPhotos.map((p) => `<div class="photo-ph" data-species-photo-id="${p.id}" style="cursor:pointer"><img src="${p.uri}" alt=""></div>`).join('')}</div>`
+      : `<div class="empty" style="padding:10px 4px">まだ写真がありません。</div>`;
+
+    ov.querySelector('.sheet').innerHTML = `
+      <div class="row" style="margin-bottom:10px">
+        <span class="sheet-title" style="margin-bottom:0">${name}</span>
+        <button class="iconbtn" id="wt-detail-close"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="photo-ph${repPhoto ? '' : ' empty'}" id="wt-detail-photo" style="height:180px;margin-bottom:10px;cursor:pointer">
+        ${repPhoto ? `<img src="${repPhoto.uri}" alt="">` : EMPTY_PHOTO_INNER}
+      </div>
+      ${firstDate ? `<div class="label-sm" style="margin-bottom:14px">初めて記録:${yearMonthLabel(firstDate)}</div>` : ''}
+
+      ${trivia ? `<div class="label-sm" style="font-weight:700;margin-bottom:2px">一般的な特徴</div><div class="label-sm" style="line-height:1.6;margin-bottom:16px">${trivia}</div>` : ''}
+
+      <div class="label-sm" style="font-weight:700;margin-bottom:2px">自分の記録(${countFor(name)}回)</div>
+      <div style="margin-bottom:16px">${additionsHtml}</div>
+
+      <div class="label-sm" style="font-weight:700;margin-bottom:6px">写真</div>
+      <div style="margin-bottom:8px">${photosHtml}</div>
+      <button class="link-btn" id="wt-add-photo-btn" style="padding:0 0 16px">＋ 写真を追加</button>
+
+      <div class="label-sm" style="font-weight:700;margin-bottom:6px">自分のメモ・評価</div>
+      <div class="field">
+        <label>メモ(任意)</label>
+        <textarea class="box" id="wt-memo" placeholder="例: 割った時に香りが強かった">${detail.memo || ''}</textarea>
+      </div>
+      ${RATING_FIELDS.map((f) => ratingRowHtml(f, detail[f.key])).join('')}
+      <button class="btn-ghost" id="wt-save-memo-btn" style="width:100%;margin-top:6px">この記録を保存する</button>
+
+      <div style="margin-top:22px;padding-top:14px;border-top:1px solid #262922">
+        <button class="link-btn" style="color:var(--red)" id="wt-delete-btn">この樹種を削除する</button>
+      </div>
+    `;
+
+    ov.querySelector('#wt-detail-close').addEventListener('click', () => {
+      closeOverlay();
+      openWoodTypeCollectionSheet();
+    });
+    ov.querySelector('#wt-detail-photo').addEventListener('click', async () => {
+      const file = await pickImageFile();
+      if (!file) return;
+      const uri = await fileToResizedDataUrl(file);
+      try {
+        addPhoto({ category: '樹種', date: todayIso(), uri, woodType: name });
+        draw();
+      } catch {
+        showToast('保存に失敗しました。写真の保存容量が上限に近づいている可能性があります');
+      }
+    });
+    ov.querySelector('#wt-add-photo-btn').addEventListener('click', () => ov.querySelector('#wt-detail-photo').click());
+    ov.querySelectorAll('[data-species-photo-id]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const photo = getPhotos().find((p) => p.id === el.dataset.speciesPhotoId);
+        if (!photo) return;
+        openPhotoViewSheet(photo, () => {
+          deletePhoto(photo.id);
+          openWoodTypeDetailSheet(name);
+        });
+      });
+    });
+    RATING_FIELDS.forEach((f) => {
+      wireRatingRow(ov, f.key, (val) => updateWoodTypeDetail(name, { [f.key]: val }));
+    });
+    ov.querySelector('#wt-save-memo-btn').addEventListener('click', () => {
+      const memo = ov.querySelector('#wt-memo').value.trim();
+      updateWoodTypeDetail(name, { memo });
+      showToast('記録を保存しました');
+    });
+    ov.querySelector('#wt-delete-btn').addEventListener('click', () => {
+      openConfirmSheet({
+        title: '樹種を削除しますか?',
+        message: `「${name}」をコレクションから削除します。薪追加などの過去の記録は残りますが、この樹種のメモ・評価は削除されます。`,
+        confirmLabel: '削除する',
+        onConfirm: () => {
+          deleteWoodTypeFromCatalog(name);
+          closeOverlay();
+          openWoodTypeCollectionSheet();
+        },
+      });
+    });
+  }
+
+  openOverlay(`<div class="sheet"></div>`);
   draw();
 }
 
@@ -781,20 +996,24 @@ async function shareImageForLookup(uri) {
   }
 }
 
-// 写真をアルバム/カレンダーから見返した時、「この薪棚を見る」「この日の記録を見る」で
-// 写真から薪棚・カレンダーへ自然に行き来できるようにする(薪棚IDの新しい永続フィールドは
-// 増やさず、resolvePhotoShelfIdでその場に逆引きするだけ)。
+// 写真をアルバム/カレンダーから見返した時、「この薪棚を見る」「この樹種を見る」
+// 「この日の記録を見る」で写真から他の画面へ自然に行き来できるようにする(薪棚IDの
+// 新しい永続フィールドは増やさず、resolvePhotoShelfIdでその場に逆引きするだけ。
+// 樹種は写真自身が持つcategory/woodTypeをそのまま使う)。
 export function openPhotoViewSheet(photo, onDeleted) {
   const canShare = typeof navigator.share === 'function';
   const shelves = getShelves();
   const shelfId = resolvePhotoShelfId(photo.id, shelves, getWoodAdditions());
   const shelf = shelfId ? shelves.find((s) => s.id === shelfId) : null;
+  const woodType = photo.category === '樹種' ? photo.woodType : null;
+  const captionName = woodType || (shelf ? shelf.name : photo.category);
   const ov = openOverlay(`
     <div class="sheet">
       <div class="photo-ph" style="height:240px;margin-bottom:10px"><img src="${photo.uri}" alt=""></div>
-      <div class="row" style="margin-bottom:8px"><span class="label-sm">${monthDayLabel(photo.date)}・${shelf ? shelf.name : photo.category}</span></div>
-      <div class="row" style="margin-bottom:12px;gap:16px;justify-content:flex-start">
+      <div class="row" style="margin-bottom:8px"><span class="label-sm">${monthDayLabel(photo.date)}・${captionName}</span></div>
+      <div class="row" style="margin-bottom:12px;gap:16px;justify-content:flex-start;flex-wrap:wrap">
         ${shelf ? `<button class="link-btn" style="padding:0" id="photo-goto-shelf">この薪棚を見る</button>` : ''}
+        ${woodType ? `<button class="link-btn" style="padding:0" id="photo-goto-woodtype">この樹種を見る</button>` : ''}
         <button class="link-btn" style="padding:0" id="photo-goto-day">この日の記録を見る</button>
       </div>
       ${canShare ? `<button class="btn-ghost" id="photo-share-btn" style="width:100%;margin-bottom:8px">この写真で調べる(樹種など)</button>` : ''}
@@ -809,6 +1028,10 @@ export function openPhotoViewSheet(photo, onDeleted) {
     closeOverlay();
     state.currentShelfId = shelf.id;
     go('check');
+  });
+  ov.querySelector('#photo-goto-woodtype')?.addEventListener('click', () => {
+    closeOverlay();
+    openWoodTypeDetailSheet(woodType);
   });
   ov.querySelector('#photo-goto-day').addEventListener('click', () => {
     closeOverlay();

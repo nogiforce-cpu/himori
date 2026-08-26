@@ -14,6 +14,7 @@ const KEYS = {
   maintenanceLogs: 'himori.maintenanceLogs',
   seasons: 'himori.seasons',
   woodTypeCatalog: 'himori.woodTypeCatalog',
+  woodTypeDetails: 'himori.woodTypeDetails',
   weatherHistory: 'himori.weatherHistory',
   notificationHistory: 'himori.notificationHistory',
 };
@@ -78,6 +79,7 @@ function seedIfEmpty() {
   writeJSON(KEYS.maintenanceLogs, []);
   writeJSON(KEYS.seasons, []);
   writeJSON(KEYS.woodTypeCatalog, []);
+  writeJSON(KEYS.woodTypeDetails, {});
 }
 
 // 既存ユーザーが以前のバージョンのデータを持っている場合に、新しいフィールドを
@@ -398,7 +400,28 @@ export function addWoodTypeToCatalog(name) {
 export function deleteWoodTypeFromCatalog(name) {
   const list = getWoodTypeCatalog().filter((w) => w !== name);
   writeJSON(KEYS.woodTypeCatalog, list);
+  deleteWoodTypeDetail(name);
   return list;
+}
+
+// ---- 樹種ごとの自分の記録(メモ・任意評価)。樹種マスター(woodTypeCatalog、単なる名前の
+// 一覧)とは別の追加専用キーに持つ。既存ユーザーのデータにこのキー自体が無くても
+// readJSONのfallbackで空オブジェクトになるため、破壊的なmigrationは不要。 ----
+export function getWoodTypeDetail(name) {
+  const all = readJSON(KEYS.woodTypeDetails, {});
+  return { memo: '', splitEase: null, catchability: null, burnDuration: null, ...(all[name] || {}) };
+}
+export function updateWoodTypeDetail(name, patch) {
+  const all = readJSON(KEYS.woodTypeDetails, {});
+  all[name] = { ...getWoodTypeDetail(name), ...patch };
+  writeJSON(KEYS.woodTypeDetails, all);
+  return all[name];
+}
+function deleteWoodTypeDetail(name) {
+  const all = readJSON(KEYS.woodTypeDetails, {});
+  if (!(name in all)) return;
+  delete all[name];
+  writeJSON(KEYS.woodTypeDetails, all);
 }
 
 // ---- デモシーズンデータ(製品を試してもらうための1シーズン分のサンプル。
