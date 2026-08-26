@@ -155,11 +155,16 @@ export async function ensureWeatherFresh(profile) {
 // 両方まとめて「冷え込み・雨・雪」と一括で言うと、真夏に雨だけ降る予報でも
 // 「雪」に言及してしまうなど季節感のない文言になるため、呼び出し側で
 // 該当する条件だけを言い分けられるようにする。
+// 「雨」は、通り雨程度の弱い雨まで拾うと毎回のように反応してしまい情報ノイズになる。
+// まとまった雨(日降水量の目安として10mm以上)だけを対象にし、一時的な弱い雨は
+// 対象外にする(以前は1mm以上で反応しており、ほぼ毎回「雨の予報」が出ていた)。
+const SUBSTANTIAL_RAIN_MM = 10;
+
 export function upcoming48hRisk(dailyWeather) {
   if (!dailyWeather || dailyWeather.length < 2) return null;
   const next2 = dailyWeather.slice(0, 2);
   const cold = next2.some((d) => d.tempMin <= 3);
-  const rain = next2.some((d) => d.precipitationSum >= 1);
+  const rain = next2.some((d) => d.precipitationSum >= SUBSTANTIAL_RAIN_MM);
   const snow = next2.some((d) => d.precipCategory === 'snow');
   if (!cold && !rain) return null;
   return { cold, rain, snow };

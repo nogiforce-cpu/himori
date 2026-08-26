@@ -154,6 +154,32 @@ export function render() {
   }
   document.getElementById('cal-grid').innerHTML = cells.join('');
 
+  // 凡例: 常設5種(火/薪づくり/薪棚/愛機/写真)は季節を問わず起こりうる出来事なので
+  // 常時表示する。雪・冷え込みとチェックで異常は、その月に実際に該当が無ければ
+  // 出さない(8月に雪の凡例が並んでいる、といった季節外れな情報量を避けるため)。
+  const legendEl = document.getElementById('cal-legend');
+  if (legendEl) {
+    const monthHasSnow = Array.from(snowDates).some((d) => inMonth(d, year, month));
+    const monthHasWarning = Array.from(warningCheckDates).some((d) => inMonth(d, year, month));
+    const chips = [
+      { icon: '#i-flame', color: 'var(--ember)', text: '火' },
+      { icon: '#i-woodwork', color: 'var(--khaki)', text: '薪づくり' },
+      { icon: '#i-warehouse', color: 'var(--green)', text: '薪棚' },
+      { icon: '#i-wrench', color: 'var(--khaki)', text: '愛機' },
+      { icon: '#i-image', color: 'var(--muted)', text: '写真' },
+    ];
+    let legendHtml = chips
+      .map((c) => `<span><svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;color:${c.color}"><use href="${c.icon}"/></svg>${c.text}</span>`)
+      .join('');
+    if (monthHasSnow) {
+      legendHtml += `<span><svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;color:var(--rain)"><use href="#i-snow"/></svg>雪・冷え込み</span>`;
+    }
+    if (monthHasWarning) {
+      legendHtml += `<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;box-shadow:0 0 0 1.5px var(--red) inset;background:rgba(181,80,46,.12)"></span>チェックで異常</span>`;
+    }
+    legendEl.innerHTML = legendHtml;
+  }
+
   // 今月のまとめ: 「回数」ではなく「日数」で数える(同じ日に何度記録しても暮らしの
   // 実感としては1日分。焚いた日数はホームの「今季◯日、火を焚きました」と考え方を揃える)。
   // 薪割りと薪追加は「薪づくり」として1つにまとめ、項目を絞って情報過多にしない。

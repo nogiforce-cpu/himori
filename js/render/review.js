@@ -75,7 +75,10 @@ export function render() {
     <div style="font-size:calc(14px * var(--font-scale));font-weight:600;line-height:1.7">${summaryText(stats, isOffSeason(burnLogs))}</div>
   `;
 
-  const deltaColor = stats.anshinDelta > 0 ? 'var(--green)' : stats.anshinDelta < 0 ? 'var(--red)' : 'var(--cream)';
+  // 充足率が下がるのは、焚いているシーズン中はごく普通のこと(薪を使えば減るのは当然)
+  // なので、赤で警告のように見せない。増えた時(薪を足した時など)だけ緑で前向きに示し、
+  // それ以外は目立たせない色にする。
+  const deltaColor = stats.anshinDelta > 0 ? 'var(--green)' : 'var(--cream)';
   const deltaText = stats.anshinDelta == null ? '' : `(週初比${stats.anshinDelta > 0 ? '+' : ''}${stats.anshinDelta}%)`;
   const currentScoreText = stats.currentScore == null ? '―' : `${stats.currentScore}%`;
   document.getElementById('review-stats').innerHTML = `
