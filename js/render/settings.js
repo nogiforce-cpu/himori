@@ -71,7 +71,9 @@ export function render() {
     <div class="settings-row" data-action="edit-location"><span>${WEATHER_V2_ENABLED ? '火のある場所' : 'お住まいの地域(天気連動)'}</span><span class="v">${profile.location ? `${profile.location.prefecture}${profile.location.city}${profile.location.town ?? ''}` : '未設定'} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
     ${
       WEATHER_V2_ENABLED
-        ? `<div class="settings-row" data-action="edit-amedas-station"><span>季節の記録に使う観測点</span><span class="v">${profile.amedasStation ? `${profile.amedasStation.name}(気象庁)` : '未設定'} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>`
+        ? `<div class="settings-row" data-action="edit-amedas-station"><span>季節の記録に使う観測点</span><span class="v">${profile.amedasStation ? `${profile.amedasStation.name}(気象庁)` : '未設定'} <svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
+           <div class="settings-row" data-action="toggle-rain-card"><span>雨カード(実験的)</span><span class="v"><button class="switch ${profile.rainCardEnabled ? 'on' : ''}"></button></span></div>
+           <div class="label-sm" style="padding:0 2px 10px;line-height:1.6">降水確率をもとに雨の予報を知らせる、気象庁への確認前の試験的な機能です。オフの間は雪・最低気温のカードのみ表示されます。</div>`
         : ''
     }
   `;
@@ -195,6 +197,12 @@ export function toggleTheme() {
   const next = profile.theme === 'light' ? 'dark' : 'light';
   updateProfile({ theme: next });
   applyTheme(next);
+  render();
+}
+
+export function toggleRainCard() {
+  const profile = getProfile();
+  updateProfile({ rainCardEnabled: !profile.rainCardEnabled });
   render();
 }
 

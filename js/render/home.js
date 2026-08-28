@@ -40,7 +40,7 @@ import {
   COLD_SNAP_THRESHOLD,
   BURN_CONSUMPTION_M3,
 } from '../derive.js';
-import { upcoming48hRisk, upcomingDaysSummary, officialWeatherCard } from '../weather.js';
+import { upcoming48hRisk, upcomingDaysSummary, officialWeatherCard, isWeatherCacheValid } from '../weather.js';
 import { WEATHER_V2_ENABLED } from '../weather-v2-flag.js';
 import { showToast, go, openOverlay, closeOverlay } from '../ui.js';
 import { openSenseNoteSheet, openShelfPickerSheet, openPhotoViewSheet, openSplitLogSheet } from './sheets.js';
@@ -122,12 +122,13 @@ function weatherSourceHtml(weather) {
     </div>`;
 }
 
-// 気象V2: 「雪」「最低気温5℃以下」「意味のある雨(降水確率70%以上)」のいずれかに
-// 該当する時だけ、公式の数値・文言をそのまま使ったカードを1枚だけ出す(通常の晴れ・
-// 曇り・普通の雨・毎日の気温一覧は出さない)。「氷点下」「強い冷え込み」等のHIMORI
-// 独自ラベルは付けず、気象庁発表の数値をそのまま見せる。
-function officialWeatherCardHtml(weather) {
-  const card = officialWeatherCard(weather?.daily);
+// 気象V2: 「雪」「最低気温5℃以下」、rainCardEnabled時のみ追加で「降水確率
+// 70%以上の雨(気象庁確認前の暫定・実験的な条件)」に該当する時だけ、公式の数値・
+// 文言をそのまま使ったカードを1枚だけ出す(通常の晴れ・曇り・普通の雨・毎日の
+// 気温一覧は出さない)。「氷点下」「強い冷え込み」等のHIMORI独自ラベルは付けず、
+// 気象庁発表の数値をそのまま見せる。
+function officialWeatherCardHtml(weather, rainCardEnabled) {
+  const card = officialWeatherCard(weather?.daily, { rainCardEnabled });
   if (!card) return '';
   const jmaUrl = jmaForecastUrl(weather);
   const jmaLink = jmaUrl ? `<a href="${jmaUrl}" target="_blank" rel="noopener" class="link-btn" style="padding:0">気象庁発表 ↗</a>` : '<span class="label-sm">気象庁発表</span>';
@@ -450,6 +451,10 @@ export function render() {
   const shelves = getShelves();
   const profile = getProfile();
   const weather = getWeatherCache();
+  // 気象V2: 「古い天気を新しい天気として見せない」方針のため、取得失敗時に返ってくる
+  // 古いキャッシュでも、表示直前に改めて有効性を確認する(isWeatherCacheValid)。
+  // 無効なら気象カード・天気ストリップとも静かに非表示にする(エラー表示はしない)。
+  const weatherIsValid = WEATHER_V2_ENABLED ? isWeatherCacheValid(weather) : !!weather;
   const burnLogs = getBurnLogs();
   const { shelf: mainShelf } = resolveMainShelf(shelves, profile);
   const offSeason = isOffSeason(burnLogs);
@@ -500,7 +505,8 @@ export function render() {
     if (WEATHER_V2_ENABLED) {
       // 気象V2: 気象庁の公式値のみを使うofficialWeatherCardに一本化(下のweatherContextLine
       // 相当の内容もこのカードに統合されるため、V2では別途重ねて出さない)。
-      const cardHtml = officialWeatherCardHtml(weather);
+      // 有効と判断できないキャッシュ(取得失敗が続いている等)では何も出さない。
+      const cardHtml = weatherIsValid ? officialWeatherCardHtml(weather, profile.rainCardEnabled) : '';
       if (cardHtml) banners.push(cardHtml);
     } else {
       const risk = upcoming48hRisk(weather.daily);
@@ -598,10 +604,12 @@ export function render() {
     ? `${context.snow ? '<svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;color:var(--rain);vertical-align:-1px;margin-right:4px"><use href="#i-snow"/></svg>' : ''}${context.text}`
     : '';
   weatherContextEl.style.display = context ? '' : 'none';
+  // 気象V2で有効と判断できないキャッシュは、折りたたみの「詳しい天気を見る」ごと
+  // 静かに非表示にする(空の折りたたみだけが残って何も開けない、という状態を避ける)。
   const weatherToggleEl = document.getElementById('btn-weather-detail-toggle');
-  weatherToggleEl.style.display = weather ? '' : 'none';
-  document.getElementById('home-weather-strip').innerHTML = weatherStripHtml(weather);
-  document.getElementById('home-weather-source').innerHTML = weatherSourceHtml(weather);
+  weatherToggleEl.style.display = weatherIsValid ? '' : 'none';
+  document.getElementById('home-weather-strip').innerHTML = weatherIsValid ? weatherStripHtml(weather) : '';
+  document.getElementById('home-weather-source').innerHTML = weatherIsValid ? weatherSourceHtml(weather) : '';
 }
 
 

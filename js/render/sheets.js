@@ -976,7 +976,7 @@ export function openAmedasStationSheet(onSelected) {
     <div class="sheet">
       <div class="sheet-title">季節の記録に使う観測点</div>
       <div style="font-size:calc(12px * var(--font-scale));color:var(--khaki);line-height:1.7;margin-bottom:10px">
-        気象庁アメダスの中から、火のある場所に近い観測点を選びます。観測点の気温は、火のある場所そのものの気温ではありません。
+        火のある場所からの距離を参考にした候補です。観測点の気温は、火のある場所そのものの気温ではありません。
       </div>
       <div id="as-body"><div class="label-sm">近くの観測点を探しています…</div></div>
     </div>
@@ -991,11 +991,14 @@ export function openAmedasStationSheet(onSelected) {
       }
       const recommended = recommendStation(candidates);
       const others = candidates.filter((c) => c.id !== recommended.id);
+      // 標高は「参考情報」として表示するだけで、距離との差を計算したり推薦の根拠には
+      // 使わない(標高差まで考慮して最適な観測点を選んでいるように見せないため)。
       const stationRow = (s, isRecommended) => `
         <div class="card" style="margin-bottom:8px${isRecommended ? ';border:1.5px solid var(--ember)' : ''}">
           ${isRecommended ? '<div class="label-sm" style="color:var(--ember);margin-bottom:4px">HIMORIおすすめ</div>' : ''}
           <div style="font-weight:700">${s.name}</div>
-          <div class="label-sm" style="margin-top:2px">火のある場所から 約${s.distanceKm.toFixed(1)}km ・ 観測所標高 ${Math.round(s.alt)}m ・ 気温観測あり</div>
+          <div class="label-sm" style="margin-top:2px">火のある場所から 約${s.distanceKm.toFixed(1)}km</div>
+          <div class="label-sm">標高 ${Math.round(s.alt)}m(参考)</div>
           <button class="btn-primary" style="width:100%;margin-top:8px" data-action="as-pick" data-id="${s.id}">${s.name}を使う</button>
         </div>`;
       bodyEl.innerHTML =

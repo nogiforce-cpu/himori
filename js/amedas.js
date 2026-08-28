@@ -68,8 +68,9 @@ async function verifyTempCapable(stationId) {
 }
 
 // 「火のある場所」の緯度経度から近い順にアメダス候補を返す。距離だけで機械的に
-// 並べ、標高差は参考情報として添えるだけでスコアには使わない(標高差を使って
-// 「この地点の方が気候が近い」と断定することは今回のポリシー上できないため)。
+// 並べる。標高(alt)は各観測点の絶対標高であり、火のある場所との標高差は計算しない
+// (火のある場所自体の標高を信頼できる方法で取得できていないため)。標高は単なる
+// 参考情報としてUI側に表示するのみで、並び順やおすすめの判定には一切使わない。
 // 気温を観測していない地点(雨量専用等)は候補から除外する。
 export async function findNearbyTempStations(lat, lon, { limit = 5, searchRadiusKm = 60, checkCount = 8 } = {}) {
   const table = await loadAmedasTable();
@@ -98,21 +99,30 @@ export async function findNearbyTempStations(lat, lon, { limit = 5, searchRadius
 
 // 気温観測が確認できた候補のうち、最も近い1件を「HIMORIおすすめ」とする。
 // 「この地点が一番正確」という断定はせず、単に距離が近いことの提示に留める。
-export function recommendStation(candidates) {
+// fireSiteElevationM(火のある場所自体の標高)は将来の拡張用の引数で、現時点では
+// 信頼できる取得方法が無いため未使用・無視している。将来これを信頼できる方法で
+// 取得できるようになった場合は、ここで各候補のaltとの差を計算し、距離に加えて
+// 標高差もおすすめ判定に加味できる(その際もUI上「最も正確」等の断定はしない)。
+export function recommendStation(candidates, { fireSiteElevationM = null } = {}) {
   if (!candidates?.length) return null;
+  void fireSiteElevationM; // 将来の拡張ポイント(現在は未使用)
   return candidates[0]; // findNearbyTempStationsは既に距離順
 }
 
-// 指定観測所の「当日ここまでの」実測気温から最低/最高を計算する。過去日への
-// 遡り取得はできない(公式に当日以降のブロックしか安定して参照できないため)ので、
-// 取得できた時点から積み上げていく。分単位の生データは保存せず、その日の
-// 代表値(最低・最高)だけを返す(データ量を無駄に増やさないため)。
-export async function fetchAmedasTodaySummary(stationId) {
-  const now = new Date();
-  const dateStr = yyyymmdd(now);
-  const currentBlock = Math.floor(now.getHours() / 3) * 3;
+// 実際に確認したところ、アメダスの実況データ(data/point/.../{日付}_{時刻}.json)は
+// 概ね直近9日分しか公式サーバー上に残っていない(10日以上前の日付を指定すると404)。
+// 推測ではなく、複数の日数で実際にリクエストして確認した値。この範囲を超える日は
+// 「未確定のまま追いつけない日」として諦め、無限に遡ろうとしない。
+const AMEDAS_RETENTION_DAYS = 9;
+
+// 指定観測所・指定日について、その日の3時間ブロック(00,03,...,upToHourまで)の
+// 実測気温から最低/最高を計算する共通処理。upToHourを省略すると21時(=1日分すべて)
+// を対象にする(確定値の計算用)。分単位の生データは保存せず、代表値(最低・最高)
+// だけを返す(データ量を無駄に増やさないため)。
+async function fetchAmedasBlockSummary(stationId, dateObj, upToHour = 21) {
+  const dateStr = yyyymmdd(dateObj);
   const blocks = [];
-  for (let h = 0; h <= currentBlock; h += 3) blocks.push(String(h).padStart(2, '0'));
+  for (let h = 0; h <= upToHour; h += 3) blocks.push(String(h).padStart(2, '0'));
 
   const results = await Promise.allSettled(
     blocks.map((hh) => fetch(`https://www.jma.go.jp/bosai/amedas/data/point/${stationId}/${dateStr}_${hh}.json`).then((r) => (r.ok ? r.json() : null)))
@@ -131,5 +141,45 @@ export async function fetchAmedasTodaySummary(stationId) {
   });
 
   if (tempMin == null) return null;
-  return { date: localIsoDate(now), tempMin, tempMax };
+  return { date: localIsoDate(dateObj), tempMin, tempMax };
+}
+
+// 「当日ここまで」の実測値から、その時点までの最低/最高を計算する。まだ一日が
+// 終わっていないため、この値は確定値ではない(この後さらに気温が下がる/上がる
+// 可能性がある)。呼び出し側はconfirmed:falseとして保存すること。
+export async function fetchAmedasTodaySummary(stationId) {
+  const now = new Date();
+  const currentBlock = Math.floor(now.getHours() / 3) * 3;
+  return fetchAmedasBlockSummary(stationId, now, currentBlock);
+}
+
+// 過去の1日分(00時〜21時の全8ブロック)の実測値から、その日の確定した最低/最高を
+// 計算する。日が完全に終わっている過去日にのみ使う。
+export async function fetchAmedasConfirmedDaySummary(stationId, dateObj) {
+  return fetchAmedasBlockSummary(stationId, dateObj, 21);
+}
+
+// 「確定させるべきなのに、まだ確定していない過去日」の一覧を返す(古い順)。
+// weatherHistoryに全く記録が無い日(=HIMORIを開かなかった日)も対象に含めることで、
+// 数日ぶりに開いた場合でも取得可能な範囲(AMEDAS_RETENTION_DAYS)を補完できるようにする。
+// ただし1回の呼び出しで一気に大量リクエストしないよう、呼び出し側でmaxDaysを渡して
+// 1回あたりの件数を制限すること(残りは次回起動時に続きから処理される)。
+export function listUnconfirmedDates(weatherHistory, sinceDateIso, { maxDays = 5 } = {}) {
+  const now = new Date();
+  const today = localIsoDate(now);
+  const floorDate = new Date(now.getTime() - AMEDAS_RETENTION_DAYS * 86400000);
+  const floorIso = localIsoDate(floorDate);
+  const startIso = sinceDateIso && sinceDateIso > floorIso ? sinceDateIso : floorIso;
+
+  const byDate = new Map(weatherHistory.map((w) => [w.date, w]));
+  const dates = [];
+  const cursor = new Date(startIso + 'T00:00:00');
+  while (true) {
+    const iso = localIsoDate(cursor);
+    if (iso >= today) break; // 当日は「確定」の対象外(まだ一日が終わっていない)
+    const existing = byDate.get(iso);
+    if (!existing || existing.confirmed === false) dates.push(iso);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates.slice(0, maxDays);
 }

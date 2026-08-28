@@ -90,10 +90,14 @@ export async function resolveJmaArea({ prefecture, city, town }) {
 // 気象庁の発表(短期+週間)を日付ごとにまとめ直す。
 // 短期(今日・明日、6時間刻み): 地方細分(南部/北部等)ごとの降水確率→日ごとの最大値を採用。
 // 週間(明日以降7日分): 府県単位の降水確率・代表地点の最高/最低気温を、公式発表のまま採用。
+// 戻り値は{byDate, reportDatetime}。reportDatetimeは気象庁がこの予報を発表した
+// 日時(shortTerm.reportDatetime、ISO8601)で、「この予報がいつ発表されたものか」を
+// キャッシュ側に持たせて、古いキャッシュを新しい予報のように見せないための判定に使う。
 export async function fetchJmaDaily({ officeCode, class10Code, class15Code }) {
   const res = await fetch(`https://www.jma.go.jp/bosai/forecast/data/forecast/${officeCode}.json`);
   if (!res.ok) throw new Error('気象庁の予報取得に失敗しました');
   const [shortTerm, extended] = await res.json();
+  const reportDatetime = shortTerm?.reportDatetime ?? null;
   const byDate = new Map();
 
   // 気象庁の発表では値が未確定の日を空文字列("")で埋めるため、Number("")が0になる
@@ -208,7 +212,7 @@ export async function fetchJmaDaily({ officeCode, class10Code, class15Code }) {
     }
   });
 
-  return byDate;
+  return { byDate, reportDatetime };
 }
 
 // ---- 天気分布予報(5kmメッシュ)の気温グリッド ----

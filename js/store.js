@@ -64,6 +64,9 @@ function seedIfEmpty() {
     postalCode: null,
     location: null,
     amedasStation: null,
+    // 降水確率ベースの雨カードは、気象庁への確認前の実験的機能のため既定でOFF。
+    // 雪・低温のカードとは独立してON/OFFできる(rainCardEnabled参照)。
+    rainCardEnabled: false,
     nextChimneyCleaning: null,
     onboardingCompleted: false,
   };
@@ -88,7 +91,14 @@ function seedIfEmpty() {
 // onboardingCompleted:true をデフォルトにしているのは、既存ユーザー(既にプロフィールが
 // あった=既に使い始めている)には初回セットアップの案内を出さないため。真の初回起動は
 // seedIfEmpty()側でonboardingCompleted:falseを明示的に書き込んでいるので、この関数は通らない。
-const PROFILE_DEFAULTS = { mainShelfId: null, seasonTargetM3: 4.6, onboardingCompleted: true, textSize: 'normal', amedasStation: null };
+const PROFILE_DEFAULTS = {
+  mainShelfId: null,
+  seasonTargetM3: 4.6,
+  onboardingCompleted: true,
+  textSize: 'normal',
+  amedasStation: null,
+  rainCardEnabled: false,
+};
 function migrateProfile(profile) {
   if (!profile) return profile;
   const missingKeys = Object.keys(PROFILE_DEFAULTS).filter((k) => !(k in profile));
@@ -291,6 +301,9 @@ export function getWeatherHistory() {
 // フィールドが無いが、カレンダー側は無いものとして安全にフォールバックする)。
 // stationId/stationName/sourceは気象V2(アメダス実測値)でのみ付与される任意項目。
 // 無くても(=旧来の予報値ベースの記録)壊れないようにする。
+// confirmedは「その日の観測が出揃った後に確定した値かどうか」を示す(気象V2のアメダス
+// 経由のみ)。省略した場合はundefinedのままにする(=旧来の記録。確定/未確定の概念が
+// 無かった頃のデータなので、シーズン振り返り側はconfirmed!==falseを確定扱いとして読む)。
 export function recordWeatherHistoryToday(todayWeather) {
   const list = getWeatherHistory();
   const idx = list.findIndex((e) => e.date === todayWeather.date);
@@ -300,6 +313,7 @@ export function recordWeatherHistoryToday(todayWeather) {
     tempMax: Math.round(todayWeather.tempMax),
     ...(todayWeather.precipCategory ? { precipCategory: todayWeather.precipCategory } : {}),
     ...(todayWeather.stationId ? { stationId: todayWeather.stationId, stationName: todayWeather.stationName, source: todayWeather.source } : {}),
+    ...(todayWeather.confirmed !== undefined ? { confirmed: todayWeather.confirmed } : {}),
   };
   if (idx === -1) list.push(entry);
   else list[idx] = entry;

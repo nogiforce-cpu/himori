@@ -29,7 +29,7 @@ async function refreshWeatherAndNotify() {
   const profile = getProfile();
   const cache = await ensureWeatherFresh(profile);
   if (cache) {
-    maybeNotifyWeather(cache.daily, profile.notificationsEnabled);
+    maybeNotifyWeather(cache, profile.notificationsEnabled, profile.rainCardEnabled);
   }
   maybeNotifyChimney(profile.nextChimneyCleaning, profile.notificationsEnabled);
   maybeNotifyShelfCheck(getShelves(), profile.notificationsEnabled);
@@ -228,6 +228,7 @@ const ACTIONS = {
   'cycle-text-size': () => settings.cycleTextSize(),
   'edit-location': () => settings.editLocation(),
   'edit-amedas-station': () => settings.editAmedasStation(),
+  'toggle-rain-card': () => settings.toggleRainCard(),
   'edit-chimney': () => settings.editChimney(),
   'export-data': () => settings.exportData(),
   'import-data': () => settings.importData(),

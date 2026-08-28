@@ -27,18 +27,14 @@ function seasonLabel(season) {
   return startYear === endYear ? `${startYear}` : `${startYear}–${String(endYear).slice(2)}`;
 }
 
-// 「寒かったから薪を多く使った」という因果を断定はせず、月ごとの2つの事実
-// (平均最低気温が最も低かった月/焚いた日数が最も多かった月)が一致した時だけ、
-// 両者を並べて見せる控えめな一文にする(一致しない月は何も言わない)。
+// 月平均最低気温が最も低かった月について、「気温が低い月だった」という事実と
+// 「その月の薪使用量」という事実を、因果や相関を示唆せずに並べるだけの一文にする。
+// 以前は「その月の焚いた日数が季節内で最多かどうか」も条件にして、両方が一致した
+// 時だけ「薪を使うペースも大きかったようです」という一文で結んでいたが、これは
+// 「寒かったから薪を多く使った」という因果関係をHIMORI側が示唆しているように読めて
+// しまうため、単純に2つの事実を別々の文として並べる形に変更した。
 function seasonalNote(burnLogs, weatherHistory, start, end) {
   const monthKey = (d) => d.slice(0, 7);
-  const burnsByMonth = new Map();
-  burnLogs
-    .filter((b) => inRange(b.date, start, end))
-    .forEach((b) => {
-      const k = monthKey(b.date);
-      burnsByMonth.set(k, (burnsByMonth.get(k) || 0) + 1);
-    });
   const tempsByMonth = new Map();
   weatherHistory
     .filter((w) => inRange(w.date, start, end) && w.tempMin != null)
@@ -48,15 +44,18 @@ function seasonalNote(burnLogs, weatherHistory, start, end) {
       list.push(w.tempMin);
       tempsByMonth.set(k, list);
     });
-  if (!burnsByMonth.size || !tempsByMonth.size) return null;
+  if (!tempsByMonth.size) return null;
 
   const coldestMonth = [...tempsByMonth.entries()].sort(
     (a, b) => a[1].reduce((s, v) => s + v, 0) / a[1].length - (b[1].reduce((s, v) => s + v, 0) / b[1].length)
   )[0]?.[0];
-  const busiestMonth = [...burnsByMonth.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-  if (!coldestMonth || coldestMonth !== busiestMonth) return null;
+  if (!coldestMonth) return null;
   const monthNum = Number(coldestMonth.slice(5, 7));
-  return `${monthNum}月は低い気温の日が多く、薪を使うペースも大きかったようです。`;
+  const burnsInMonth = burnLogs.filter((b) => monthKey(b.date) === coldestMonth).length;
+  const monthVolumeM3 = Math.round(burnsInMonth * BURN_CONSUMPTION_M3 * 100) / 100;
+  const lines = [`${monthNum}月は低い気温の日が多い月でした。`];
+  if (burnsInMonth > 0) lines.push(`${monthNum}月の薪使用量は${monthVolumeM3}m³でした。`);
+  return lines;
 }
 
 function statRow(label, value) {
@@ -74,7 +73,11 @@ export function openSeasonReviewSheet(seasonId) {
   const burnDays = new Set(burnLogs.map((b) => b.date)).size;
   const usedVolumeM3 = Math.round(burnLogs.length * BURN_CONSUMPTION_M3 * 100) / 100;
 
-  const weatherHistory = getWeatherHistory().filter((w) => inRange(w.date, start, end) && w.tempMin != null);
+  // シーズン振り返りには確定済み(confirmed !== false)の日データだけを使う。
+  // 当日分の実測はまだ最低/最高が変わりうる未確定値のため、季節の統計には含めない。
+  const weatherHistory = getWeatherHistory().filter(
+    (w) => inRange(w.date, start, end) && w.tempMin != null && w.confirmed !== false
+  );
   const lowestTemp = weatherHistory.length ? Math.min(...weatherHistory.map((w) => w.tempMin)) : null;
   const belowZeroDays = weatherHistory.filter((w) => w.tempMin < 0).length;
   // 「◯◯観測所」と単独の観測点名を名乗るのは、この季節の記録が全てその観測点由来
@@ -122,7 +125,7 @@ export function openSeasonReviewSheet(seasonId) {
         ${woodTypesMet > 0 ? statRow('出会った樹種', `${woodTypesMet}種`) : ''}
       </div>
       ${tempSourceLabel ? `<div class="label-sm" style="margin-bottom:14px">${tempSourceLabel}</div>` : ''}
-      ${note ? `<div class="card" style="font-size:calc(12px * var(--font-scale));line-height:1.7;margin-bottom:14px">${note}</div>` : ''}
+      ${note ? `<div class="card" style="font-size:calc(12px * var(--font-scale));line-height:1.7;margin-bottom:14px">${note.join('<br>')}</div>` : ''}
 
       <div class="label-sm" style="font-weight:700;margin-bottom:6px">この季節の出来事</div>
       <div>${eventsHtml}</div>

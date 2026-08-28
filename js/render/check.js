@@ -1,6 +1,7 @@
 import { getShelf, getChecksForShelf, addCheck, updateCheck, updateShelf, addPhoto, getWeatherCache, getPhotos, getProfile, getWoodAdditions } from '../store.js';
 import { dryFriendlyDaysCount, todayIso, DRY_MOISTURE_THRESHOLD_PERCENT, CHECKLIST_ITEMS, CHECK_STATE_LABELS, nextCheckState, shelfStatusLabel, shelfStatusNote, monthDayLabel } from '../derive.js';
-import { factualTodayNote } from '../weather.js';
+import { factualTodayNote, isWeatherCacheValid } from '../weather.js';
+import { WEATHER_V2_ENABLED } from '../weather-v2-flag.js';
 import { showToast, go, openOverlay, closeOverlay } from '../ui.js';
 import { state, ensureCurrentShelf } from '../state.js';
 import { openShelfPickerSheet, openShelfEditSheet, openCheckEditSheet, openPhotoZoomSheet, percentSliderHtml, wirePercentSlider } from './sheets.js';
@@ -61,7 +62,8 @@ export function render() {
 
   const weather = getWeatherCache();
   const noteParts = [];
-  if (weather) {
+  // 気象V2: 古いキャッシュ(取得失敗が続いている等)は「新しい予報」のように見せない。
+  if (weather && (!WEATHER_V2_ENABLED || isWeatherCacheValid(weather))) {
     const note = factualTodayNote(weather.daily);
     if (note) noteParts.push(note);
     const dryDays = dryFriendlyDaysCount(weather.daily);
