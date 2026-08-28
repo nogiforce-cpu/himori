@@ -6,7 +6,7 @@
 // 精度が「市区町村程度」でしかないなら、入力してもらう情報もその粒度に合わせる方が誠実。
 import { getWeatherCache, setWeatherCache, recordWeatherHistoryToday, getWeatherHistory, updateProfile, addNotificationHistory } from './store.js';
 import { localIsoDate } from './date-utils.js';
-import { resolveJmaArea, fetchJmaDaily, fetchGridMinMaxTemp } from './jma.js';
+import { resolveJmaArea, fetchJmaDaily, fetchGridMinMaxTemp, AREA_INDEX_VERSION } from './jma.js';
 import { WEATHER_V2_ENABLED } from './weather-v2-flag.js';
 
 const NOTIFY_FLAG_KEY = 'himori.lastWeatherNotifyDate';
@@ -108,8 +108,8 @@ async function overlayJmaOfficial(daily, jmaArea) {
 // precipitationSumはOpen-Meteo由来だったフィールドのため、V2では出力しない
 // (乾燥日数の推定機能はcheck.js側でこれらの不在を検知して非表示にする)。
 async function fetchDailyForecastV2(location) {
-  if (!location?.jma?.officeCode) return { daily: [], reportDatetime: null };
-  const { byDate, reportDatetime } = await fetchJmaDaily(location.jma);
+  if (!location?.jma?.officeCode) return { daily: [], reportDatetime: null, weeklyStationName: null };
+  const { byDate, reportDatetime, weeklyStationName } = await fetchJmaDaily(location.jma);
   const todayIso = localIsoDate();
   const daily = Array.from(byDate.entries())
     .filter(([date]) => date >= todayIso)
@@ -122,7 +122,7 @@ async function fetchDailyForecastV2(location) {
       weatherText: v.weatherText ?? null,
       precipCategory: v.precipCategory ?? null,
     }));
-  return { daily, reportDatetime };
+  return { daily, reportDatetime, weeklyStationName };
 }
 
 // 気象庁の予報文(weatherText)から「雪」「雨」「雨または雪」を判定する。既存のprecipCategory
@@ -156,15 +156,26 @@ const EXPERIMENTAL_RAIN_POP_THRESHOLD = 70;
 // 「氷点下」「強い冷え込み」等のHIMORI独自ラベルは付けない。
 // rainCardEnabled(既定false)がfalseの間は、雨に関する判定自体を行わない
 // (雪・低温の判定とは完全に独立させる)。
-export function officialWeatherCard(dailyWeather, { rainCardEnabled = false } = {}) {
+//
+// 【最低気温の出典について】雪/雨の判定(kind)は、これまで通り地点予報の天気文・
+// 降水確率(火のある場所を含む地方細分=南部/北部等)を使う。一方、表示する「最低気温」
+// の数値そのものは、地点予報の週間気温(広島県内では観測点が1つしかなく、県内のどこに
+// 住んでいても常に同じ代表地点の値になってしまうことが監査で判明した)ではなく、
+// 天気分布予報(5kmメッシュ)のtemp_pointから、火のある場所に最も近い格子点の値
+// (gridTemp、jma.jsのfetchGridMinMaxTemp)を使う。gridTempは「明日」1日分しか
+// 取得していないため、gridTemp.dateが実際に「明日」の日付と一致する時だけ採用し、
+// 一致しない(取得失敗・日付がずれている等)場合は最低気温を表示しない
+// (値が無ければ何も言わない。他の値で代用したり補間したりしない)。
+export function officialWeatherCard(dailyWeather, gridTemp, { rainCardEnabled = false } = {}) {
   if (!dailyWeather || dailyWeather.length < 2) return null;
   const tomorrow = dailyWeather[1];
   if (!tomorrow) return null;
   const kind = officialPrecipKind(tomorrow.weatherText);
-  const coldTrigger = tomorrow.tempMin != null && tomorrow.tempMin <= 5;
+  const gridTempMin = gridTemp && gridTemp.date === tomorrow.date ? gridTemp.tempMin : null;
+  const coldTrigger = gridTempMin != null && gridTempMin <= 5;
 
   if (kind === 'snow' || kind === 'mixed') {
-    return { kind, date: tomorrow.date, tempMin: tomorrow.tempMin, showCold: coldTrigger };
+    return { kind, date: tomorrow.date, tempMin: gridTempMin, showCold: coldTrigger };
   }
   if (
     rainCardEnabled &&
@@ -172,10 +183,10 @@ export function officialWeatherCard(dailyWeather, { rainCardEnabled = false } = 
     tomorrow.precipitationProbability != null &&
     tomorrow.precipitationProbability >= EXPERIMENTAL_RAIN_POP_THRESHOLD
   ) {
-    return { kind: 'rain', date: tomorrow.date, precipitationProbability: tomorrow.precipitationProbability, tempMin: tomorrow.tempMin, showCold: coldTrigger };
+    return { kind: 'rain', date: tomorrow.date, precipitationProbability: tomorrow.precipitationProbability, tempMin: gridTempMin, showCold: coldTrigger };
   }
   if (coldTrigger) {
-    return { kind: 'cold', date: tomorrow.date, tempMin: tomorrow.tempMin, showCold: true };
+    return { kind: 'cold', date: tomorrow.date, tempMin: gridTempMin, showCold: true };
   }
   return null;
 }
@@ -183,7 +194,7 @@ export function officialWeatherCard(dailyWeather, { rainCardEnabled = false } = 
 // キャッシュの構造が変わった時(取得するフィールドを増やした等)に、日付だけ見て
 // 「新鮮」と誤判定して古い形のデータを使い続けないようにするためのバージョン番号。
 // フィールドを追加・変更したらこの数字を上げる。
-const CACHE_VERSION = 10;
+const CACHE_VERSION = 11;
 
 // 予報モデルは1日に何度も更新されるため、1日1回しか取り直さないと夜には朝の古い
 // 予報のまま(実際の気温とズレて見える)になってしまう。数時間おきに取り直す。
@@ -211,10 +222,18 @@ export async function ensureWeatherFresh(profile) {
   if (!profile?.location) return getWeatherCache();
   const cache = getWeatherCache();
   const today = localIsoDate();
+  // 郵便番号登録済みだが気象庁の発表区分(jma)が未解決、古い形(class20Code追加前)、
+  // または地域階層データ(area.json)のバージョンが古い状態で解決された既存プロフィールは
+  // 再解決が必要。この判定は「キャッシュがまだ新しいから」という理由で素通りされては
+  // ならない(lat/lonが同じままjmaだけが古い/誤っているケースを取り逃がすため)ので、
+  // 下のisFresh判定より先に行い、needsReresolveがtrueならisFreshを強制的にfalseにする。
+  const needsReresolve =
+    !profile.location.jma || !('class20Code' in profile.location.jma) || profile.location.jma.resolvedAreaIndexVersion !== AREA_INDEX_VERSION;
   const sameLocation =
     cache?.location && cache.location.lat === profile.location.lat && cache.location.lon === profile.location.lon;
   const hoursSinceFetch = cache?.fetchedAt ? (Date.now() - new Date(cache.fetchedAt).getTime()) / 3600000 : Infinity;
   const isFresh =
+    !needsReresolve &&
     cache &&
     cache.version === CACHE_VERSION &&
     sameLocation &&
@@ -222,12 +241,12 @@ export async function ensureWeatherFresh(profile) {
     hoursSinceFetch < REFRESH_INTERVAL_HOURS;
   if (isFresh) return cache;
   try {
-    // 郵便番号登録済みだが気象庁の発表区分(jma)が未解決、または古い形(class20Code
-    // 追加前)の既存プロフィールは、この場で補完・再解決する(緯度経度は取り直さず、
-    // 既に持っている住所情報から解決できるため無料)。
+    // 「新しい火のある場所なのに、以前の場所を解決した時の古いキャッシュに基づく地域
+    // 判定のまま」という状態を安全に解消する(既存ユーザーも次回の天気取得時に自動で
+    // 再評価される。緯度経度は取り直さず、既に持っている住所情報から解決するため無料)。
     let location = profile.location;
-    if (!location.jma || !('class20Code' in location.jma)) {
-      const jma = await resolveJmaArea(location).catch(() => null);
+    if (needsReresolve) {
+      const jma = await resolveJmaArea(location, { forceFresh: true }).catch(() => null);
       if (jma) {
         location = { ...location, jma };
         updateProfile({ location });
@@ -236,8 +255,9 @@ export async function ensureWeatherFresh(profile) {
     let daily;
     let gridTemp = null;
     let reportDatetime = null;
+    let weeklyStationName = null;
     if (WEATHER_V2_ENABLED) {
-      ({ daily, reportDatetime } = await fetchDailyForecastV2(location));
+      ({ daily, reportDatetime, weeklyStationName } = await fetchDailyForecastV2(location));
       // 5kmメッシュの気温は参考表示用の補助情報(取得できなくても致命的ではないため
       // 個別にcatchし、失敗しても地点予報側の表示には影響させない)
       gridTemp = await fetchGridMinMaxTemp(location.lat, location.lon).catch(() => null);
@@ -249,7 +269,10 @@ export async function ensureWeatherFresh(profile) {
     // reportDatetime: 気象庁がこの予報を発表した日時(V1では未使用)。fetchedAtは
     // HIMORI側がこのデータを取得した日時。両方持たせることで、「今表示している内容が
     // いつ発表された予報か」を、古いキャッシュを新しい予報として見せない判定に使える。
-    const next = { version: CACHE_VERSION, fetchedAt: new Date().toISOString(), reportDatetime, location, daily, gridTemp };
+    // weeklyStationName: 数日先までの気温(週間予報)の代表観測地点名(例:「広島」)。
+    // 火のある場所そのものの地点ではなく県内共通の代表地点であることをUI側で
+    // 正確に案内するために保持する。
+    const next = { version: CACHE_VERSION, fetchedAt: new Date().toISOString(), reportDatetime, weeklyStationName, location, daily, gridTemp };
     setWeatherCache(next);
     // 気象V2では「予報値を実績として保存しない」という方針のため、weatherHistoryへの
     // 積み上げはアメダス観測点(実測値)経由でのみ行う(下のensureAmedasHistoryFresh)。
@@ -393,7 +416,7 @@ export function maybeNotifyWeather(weather, enabled, rainCardEnabled = false) {
   if (WEATHER_V2_ENABLED) {
     // 古いキャッシュ(取得失敗が続いている等)を新しい予報として通知しない。
     if (!isWeatherCacheValid(weather)) return;
-    const card = officialWeatherCard(weather.daily, { rainCardEnabled });
+    const card = officialWeatherCard(weather.daily, weather.gridTemp, { rainCardEnabled });
     if (!card) return;
     const text =
       card.kind === 'snow'

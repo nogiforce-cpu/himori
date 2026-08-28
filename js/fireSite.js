@@ -35,12 +35,18 @@ export async function lookupAddressCandidates(postalCode) {
 
 // 選ばれた住所候補を「火のある場所」として確定する。気象庁の発表区分(office/class10/
 // class15/class20)も同時に解決し、既存の地点予報取得コードがそのまま使える形にする。
+// forceFresh:trueで解決するため、地域階層のローカルキャッシュ(最大90日保持)が
+// 古くても、新しく選んだ場所についてはその場で確実に最新のarea.jsonから解決し直す
+// (前の場所を解決した時の古いキャッシュが新しい場所に流用されないようにするため)。
 export async function resolveFireSite(candidate) {
-  const jma = await resolveJmaArea({
-    prefecture: candidate.prefecture,
-    city: candidate.city,
-    town: candidate.town,
-  }).catch(() => null);
+  const jma = await resolveJmaArea(
+    {
+      prefecture: candidate.prefecture,
+      city: candidate.city,
+      town: candidate.town,
+    },
+    { forceFresh: true }
+  ).catch(() => null);
   return {
     lat: candidate.lat,
     lon: candidate.lon,

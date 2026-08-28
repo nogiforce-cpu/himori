@@ -12,19 +12,29 @@ import { localIsoDate } from './date-utils.js';
 
 const AREA_INDEX_KEY = 'himori.jmaAreaIndex';
 const AREA_INDEX_TTL_MS = 90 * 24 * 3600 * 1000; // 地域階層はほぼ変化しないため90日キャッシュ
+// area.jsonのキャッシュ形式・取り扱いを変えた時に上げるバージョン番号。resolveJmaAreaの
+// 結果にこのバージョンを刻んでおき(resolvedAreaIndexVersion)、既に保存済みのprofile.location.jma
+// がどのバージョンで解決されたものかを後から判別できるようにする。上げると、90日の期限内でも
+// 全ユーザーのキャッシュが一度だけ確実に再取得される(「火のある場所」の地域判定がキャッシュの
+// 古さによって実際の判定とズレたまま固定されてしまう事故を防ぐため)。
+export const AREA_INDEX_VERSION = 2;
 
-async function loadAreaIndex() {
-  try {
-    const cached = JSON.parse(localStorage.getItem(AREA_INDEX_KEY) || 'null');
-    if (cached && Date.now() - cached.fetchedAt < AREA_INDEX_TTL_MS) return cached.data;
-  } catch {
-    // 壊れたキャッシュは無視して取り直す
+async function loadAreaIndex({ forceFresh = false } = {}) {
+  if (!forceFresh) {
+    try {
+      const cached = JSON.parse(localStorage.getItem(AREA_INDEX_KEY) || 'null');
+      if (cached && cached.version === AREA_INDEX_VERSION && Date.now() - cached.fetchedAt < AREA_INDEX_TTL_MS) {
+        return cached.data;
+      }
+    } catch {
+      // 壊れたキャッシュは無視して取り直す
+    }
   }
   const res = await fetch('https://www.jma.go.jp/bosai/common/const/area.json');
   if (!res.ok) throw new Error('気象庁の地域情報取得に失敗しました');
   const data = await res.json();
   try {
-    localStorage.setItem(AREA_INDEX_KEY, JSON.stringify({ fetchedAt: Date.now(), data }));
+    localStorage.setItem(AREA_INDEX_KEY, JSON.stringify({ version: AREA_INDEX_VERSION, fetchedAt: Date.now(), data }));
   } catch {
     // 容量オーバー等は致命的ではないので無視
   }
@@ -45,11 +55,14 @@ export async function listRegionsForOffice(officeCode) {
 // (府県予報区office・地方細分class10・二次細分class15)に対応付ける。
 // 市区町村名が一致しない場合は都道府県単位までのフォールバックに留める
 // (誤った市区町村の予報を出すより、粒度は粗くても確実な方を優先する)。
-export async function resolveJmaArea({ prefecture, city, town }) {
+// forceFresh: trueの時はarea.jsonのローカルキャッシュを使わず必ず取得し直す。
+// 「火のある場所」を新規登録・変更した、まさにその瞬間だけtrueを渡し、その場所に
+// 対応する地域判定が数週間前のキャッシュに引きずられないようにする(fireSite.js参照)。
+export async function resolveJmaArea({ prefecture, city, town }, { forceFresh = false } = {}) {
   if (!prefecture) return null;
   let area;
   try {
-    area = await loadAreaIndex();
+    area = await loadAreaIndex({ forceFresh });
   } catch {
     return null;
   }
@@ -74,12 +87,14 @@ export async function resolveJmaArea({ prefecture, city, town }) {
       class15Code: null,
       class20Code: null,
       regionName: officeInfo.name,
+      resolvedAreaIndexVersion: AREA_INDEX_VERSION,
     };
   }
   const class15Code = matched.parent;
   const class10Code = area.class15s[class15Code]?.parent;
   return {
     officeCode,
+    resolvedAreaIndexVersion: AREA_INDEX_VERSION,
     class10Code: class10Code || null,
     class15Code: class15Code || null,
     class20Code: matched.code,
@@ -212,7 +227,11 @@ export async function fetchJmaDaily({ officeCode, class10Code, class15Code }) {
     }
   });
 
-  return { byDate, reportDatetime };
+  // 数日先までの気温(週間予報)がどの代表観測地点の値かをUI側で正しく案内できるよう、
+  // 地点名も一緒に返す(例: 広島県なら「広島」1地点のみで、南部/北部の区別なく
+  // 県内共通。ハードコードせず、実際にAPIが返した地点名をそのまま使う)。
+  const weeklyStationName = weeklyTempArea?.area?.name ?? null;
+  return { byDate, reportDatetime, weeklyStationName };
 }
 
 // ---- 天気分布予報(5kmメッシュ)の気温グリッド ----

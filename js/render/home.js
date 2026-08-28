@@ -108,13 +108,25 @@ function weatherSourceHtml(weather) {
   const jmaUrl = jmaForecastUrl(weather);
   // 「南部」だけだとどこの南部か分からないため、必ず都道府県名を前に付ける。
   const regionLabel = weather.location?.prefecture ? `${weather.location.prefecture}${jma?.regionName}` : jma?.regionName;
-  const label = WEATHER_V2_ENABLED
-    ? officeCode
-      ? `気象庁「${regionLabel}」の発表値(降水確率・最高/最低気温)をそのまま表示。数時間ごとに更新。地域が体感と違う場合は設定から変更できます`
-      : '火のある場所が未設定です'
-    : officeCode
+  let label;
+  if (WEATHER_V2_ENABLED) {
+    if (!officeCode) {
+      label = '火のある場所が未設定です';
+    } else {
+      // 監査の結果、降水確率・天気(雨/雪)と、数日先までの気温とでは出典の粒度が
+      // 異なることが分かった: 降水確率・天気文は地方細分(「広島県北部」等、火のある
+      // 場所を含む区分)の発表値だが、数日先までの気温は都道府県内の代表観測地点
+      // 1箇所(例:「広島」)の値であり、南部/北部の区別なく県内で共通の値になる。
+      // 1つのラベルで「地域の発表値」とまとめず、それぞれの出典を正確に分けて示す
+      // (HIMORI独自の予報であるかのような表現にしないため)。
+      const stationLabel = weather.weeklyStationName ? `「${weather.weeklyStationName}」の代表観測値` : '県内代表観測地点の値';
+      label = `降水確率・天気は気象庁「${regionLabel}」の発表区分、数日先までの気温は${stationLabel}(火のある場所そのものの値ではありません)。数時間ごとに更新`;
+    }
+  } else {
+    label = officeCode
       ? `気象庁「${regionLabel}」の発表値(降水確率・最高/最低気温)。当日の最低気温のみ数値予報モデルの推定値。数時間ごとに更新。地域が体感と違う場合は設定から変更できます`
       : '数値予報モデル(Open-Meteo)による推定値を表示。数時間ごとに更新';
+  }
   return `
     <div class="label-sm" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
       <span>${label}</span>
@@ -127,35 +139,51 @@ function weatherSourceHtml(weather) {
 // 文言をそのまま使ったカードを1枚だけ出す(通常の晴れ・曇り・普通の雨・毎日の
 // 気温一覧は出さない)。「氷点下」「強い冷え込み」等のHIMORI独自ラベルは付けず、
 // 気象庁発表の数値をそのまま見せる。
+// 気象庁「天気分布予報」の公開ページ(5kmメッシュのtemp_pointの出典として案内する)。
+const WDIST_URL = 'https://www.jma.go.jp/bosai/wdist/';
+
 function officialWeatherCardHtml(weather, rainCardEnabled) {
-  const card = officialWeatherCard(weather?.daily, { rainCardEnabled });
+  const card = officialWeatherCard(weather?.daily, weather?.gridTemp, { rainCardEnabled });
   if (!card) return '';
   const jmaUrl = jmaForecastUrl(weather);
-  const jmaLink = jmaUrl ? `<a href="${jmaUrl}" target="_blank" rel="noopener" class="link-btn" style="padding:0">気象庁発表 ↗</a>` : '<span class="label-sm">気象庁発表</span>';
+  // 雪/雨または雪/雨の判定(kind)は地点予報(南部・北部等の発表区分)の天気文が出典、
+  // 最低気温(tempMin)は5kmメッシュ天気分布予報(火のある場所に最も近い格子点)が出典、
+  // と出典元が異なるため、リンクもそれぞれの出典ページを指すよう分ける。
+  const forecastLink = jmaUrl ? `<a href="${jmaUrl}" target="_blank" rel="noopener" class="link-btn" style="padding:0">気象庁発表 ↗</a>` : '<span class="label-sm">気象庁発表</span>';
+  const wdistLink = `<a href="${WDIST_URL}" target="_blank" rel="noopener" class="link-btn" style="padding:0">気象庁 天気分布予報 ↗</a>`;
 
   let mainText;
   let icon;
   let advice;
+  let jmaLink;
   if (card.kind === 'snow') {
     mainText = '明日は雪の予報です。';
     icon = 'i-snow';
     advice = '薪を少し取り込んでおくと安心です。';
+    jmaLink = forecastLink;
   } else if (card.kind === 'mixed') {
     mainText = '明日は雨または雪の予報です。';
     icon = 'i-snow';
     advice = '外の薪は、少し取り込んでおくと安心です。';
+    jmaLink = forecastLink;
   } else if (card.kind === 'rain') {
     mainText = '明日は雨の予報です。';
     icon = 'i-drop';
     advice = '外の薪は、早めに取り込んでおくと安心です。';
+    jmaLink = forecastLink;
   } else {
     mainText = `明日の最低気温 ${Math.round(card.tempMin)}℃`;
     icon = 'i-drop';
     advice = '使う薪を少し準備しておいてもよさそうです。';
+    jmaLink = wdistLink;
   }
   // 雪・雨のカードに低温も該当する場合、別カードを重ねず同じカードに補助行として同居させる
-  // (同じような内容のカードが2枚並ばないようにするため)。
-  const coldSubline = card.kind !== 'cold' && card.showCold ? `<div class="label-sm" style="margin-top:2px">明日の最低気温 ${Math.round(card.tempMin)}℃</div>` : '';
+  // (同じような内容のカードが2枚並ばないようにするため)。この補助行の気温だけ出典が
+  // 天気分布予報(5kmメッシュ)なので、その旨を短く添える。
+  const coldSubline =
+    card.kind !== 'cold' && card.showCold
+      ? `<div class="label-sm" style="margin-top:2px">明日の最低気温 ${Math.round(card.tempMin)}℃(天気分布予報)</div>`
+      : '';
   const rainProbLine = card.kind === 'rain' && card.precipitationProbability != null ? `<div class="label-sm" style="margin-top:2px">予想降水確率 ${card.precipitationProbability}%</div>` : '';
 
   return `
