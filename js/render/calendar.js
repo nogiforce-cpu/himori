@@ -111,30 +111,30 @@ export function render() {
     const classes = ['cal-day'];
     if (dateIso === today) classes.push('today');
     if (dateIso === lastBurn) classes.push('last-burn');
+    if (burnDates.has(dateIso)) classes.push('has-burn');
     if (warningCheckDates.has(dateIso)) classes.push('warn');
-    // 色分けされたドットだけだと意味が伝わりにくいため、それぞれの出来事を表す小さな
+    // 色分けされたバッジだけだと意味が伝わりにくいため、それぞれの出来事を表す小さな
     // HIMORI専用アイコンに置き換える(絵文字は使わない)。異常チェックはマス全体の
     // 赤いリングで表す(today/last-burnと同じ「特別な日はマスの縁で示す」パターンに統一)。
     // 出来事アイコンを常に天気(雪)より先に並べ、「出来事 > 天気」の優先順位を保つ。
-    const icons = [];
-    if (burnDates.has(dateIso)) {
-      icons.push('<svg class="icon ic-burn" viewBox="0 0 24 24"><use href="#i-flame"/></svg>');
-    }
-    if (woodworkDates.has(dateIso)) {
-      icons.push('<svg class="icon ic-woodwork" viewBox="0 0 24 24"><use href="#i-woodwork"/></svg>');
-    }
-    if (shelfCheckDates.has(dateIso)) {
-      icons.push('<svg class="icon ic-shelf" viewBox="0 0 24 24"><use href="#i-warehouse"/></svg>');
-    }
-    if (maintDates.has(dateIso)) {
-      icons.push('<svg class="icon ic-maint" viewBox="0 0 24 24"><use href="#i-wrench"/></svg>');
-    }
-    if (photoDates.has(dateIso)) {
-      icons.push('<svg class="icon ic-photo" viewBox="0 0 24 24"><use href="#i-image"/></svg>');
-    }
-    if (snowDates.has(dateIso)) {
-      icons.push('<svg class="icon ic-snow" viewBox="0 0 24 24"><use href="#i-snow"/></svg>');
-    }
+    // 色に意味を持たせる(HIMORIの視覚言語): 火=炎色、薪づくり=薪色、薪棚=深緑、
+    // 愛機=鉄・灰の暖色、写真=オリーブ、雪=控えめな青。
+    const dayEvents = [];
+    if (burnDates.has(dateIso)) dayEvents.push({ badge: 'b-burn', symbol: '#i-flame', label: '火を焚いた' });
+    if (woodworkDates.has(dateIso)) dayEvents.push({ badge: 'b-woodwork', symbol: '#i-woodwork', label: '薪づくり' });
+    if (shelfCheckDates.has(dateIso)) dayEvents.push({ badge: 'b-shelf', symbol: '#i-warehouse', label: '薪棚の記録' });
+    if (maintDates.has(dateIso)) dayEvents.push({ badge: 'b-stove', symbol: '#i-wrench', label: '愛機のメンテナンス' });
+    if (photoDates.has(dateIso)) dayEvents.push({ badge: 'b-photo', symbol: '#i-image', label: '写真' });
+    if (snowDates.has(dateIso)) dayEvents.push({ badge: 'b-snow', symbol: '#i-snow', label: '雪・冷え込み' });
+    // 極小アイコンを大量に並べると情報過多になるため、2〜3個程度の美しい配置に留める。
+    // 4件目以降がある日は、3個目を「+N」の数字チップに差し替える(Nは残り件数)。
+    const MAX_DAY_ICONS = 3;
+    const shownEvents = dayEvents.length > MAX_DAY_ICONS ? dayEvents.slice(0, MAX_DAY_ICONS - 1) : dayEvents;
+    const overflowCount = dayEvents.length > MAX_DAY_ICONS ? dayEvents.length - shownEvents.length : 0;
+    const iconsHtml =
+      shownEvents
+        .map((e) => `<span class="cal-event-badge ${e.badge}" role="img" aria-label="${e.label}"><svg class="icon" viewBox="0 0 24 24"><use href="${e.symbol}"/></svg></span>`)
+        .join('') + (overflowCount > 0 ? `<span class="cal-more">+${overflowCount}</span>` : '');
     // シーズン開始は炎アイコン(ブランドの炎モチーフ)、終了は天気アイコンと紛らわしい絵文字を避けて
     // 「終」の文字バッジで表す
     // 予定(まだ起きていない未来のこと)は実績と混同しないよう、点線の縁取りバッジで
@@ -149,7 +149,7 @@ export function render() {
     cells.push(`
       <div class="${classes.join(' ')}" data-action="open-cal-day" data-date="${dateIso}">
         <div class="cal-day-top"><span>${d}</span>${seasonMark}</div>
-        <span class="cal-icons">${icons.join('')}</span>
+        <span class="cal-icons">${iconsHtml}</span>
       </div>
     `);
   }
@@ -163,17 +163,17 @@ export function render() {
     const monthHasSnow = Array.from(snowDates).some((d) => inMonth(d, year, month));
     const monthHasWarning = Array.from(warningCheckDates).some((d) => inMonth(d, year, month));
     const chips = [
-      { icon: '#i-flame', color: 'var(--ember)', text: '火' },
-      { icon: '#i-woodwork', color: 'var(--khaki)', text: '薪づくり' },
-      { icon: '#i-warehouse', color: 'var(--green)', text: '薪棚' },
-      { icon: '#i-wrench', color: 'var(--khaki)', text: '愛機' },
-      { icon: '#i-image', color: 'var(--muted)', text: '写真' },
+      { badge: 'b-burn', icon: '#i-flame', text: '火' },
+      { badge: 'b-woodwork', icon: '#i-woodwork', text: '薪づくり' },
+      { badge: 'b-shelf', icon: '#i-warehouse', text: '薪棚' },
+      { badge: 'b-stove', icon: '#i-wrench', text: '愛機' },
+      { badge: 'b-photo', icon: '#i-image', text: '写真' },
     ];
     let legendHtml = chips
-      .map((c) => `<span><svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;color:${c.color}"><use href="${c.icon}"/></svg>${c.text}</span>`)
+      .map((c) => `<span><span class="cal-event-badge ${c.badge}"><svg class="icon" viewBox="0 0 24 24"><use href="${c.icon}"/></svg></span>${c.text}</span>`)
       .join('');
     if (monthHasSnow) {
-      legendHtml += `<span><svg class="icon" viewBox="0 0 24 24" style="width:12px;height:12px;color:var(--rain)"><use href="#i-snow"/></svg>雪・冷え込み</span>`;
+      legendHtml += `<span><span class="cal-event-badge b-snow"><svg class="icon" viewBox="0 0 24 24"><use href="#i-snow"/></svg></span>雪・冷え込み</span>`;
     }
     if (monthHasWarning) {
       legendHtml += `<span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;box-shadow:0 0 0 1.5px var(--red) inset;background:rgba(181,80,46,.12)"></span>チェックで異常</span>`;
@@ -195,15 +195,21 @@ export function render() {
   const checkDays = new Set(monthChecks.map((c) => c.date)).size;
   const summaryEl = document.getElementById('cal-month-summary');
   if (summaryEl) {
-    const summaryIcon = (symbol, extra = '') =>
-      `<svg class="icon" viewBox="0 0 24 24" style="width:13px;height:13px;vertical-align:-2px;margin-right:3px${extra}"><use href="${symbol}"/></svg>`;
-    const rows = [];
-    if (burnDays > 0) rows.push(`${summaryIcon('#i-flame', ';color:var(--ember)')}火を焚いた日 ${burnDays}日`);
-    if (workDays > 0) rows.push(`<img src="assets/icon-axe.png" alt="" style="width:13px;height:13px;vertical-align:-2px;margin-right:3px;object-fit:contain">薪づくり ${workDays}日`);
-    if (checkDays > 0) rows.push(`${summaryIcon('#i-check')}薪棚の記録 ${checkDays}日`);
-    if (monthMaint.length > 0) rows.push(`${summaryIcon('#i-wrench')}メンテナンス ${monthMaint.length}回`);
-    summaryEl.innerHTML = rows.length
-      ? `<div class="label-sm" style="margin-bottom:6px">今月のまとめ</div><div style="font-size:calc(12px * var(--font-scale));line-height:1.9">${rows.join('<br>')}</div>`
+    // 文字の羅列だった「今月のまとめ」を、アイコン+数値の小さなカードの並びにする。
+    // 分析ダッシュボードにはせず、「今月こんなことをしたな」と眺められる密度に留める
+    // (項目数はこれまで通り絞ったまま、カード化するだけで新しい情報は増やさない)。
+    const items = [];
+    if (burnDays > 0) items.push({ badge: 'b-burn', icon: '#i-flame', n: `${burnDays}日`, l: '火を焚いた日' });
+    if (workDays > 0) items.push({ badge: 'b-woodwork', icon: '#i-woodwork', n: `${workDays}日`, l: '薪づくり' });
+    if (checkDays > 0) items.push({ badge: 'b-shelf', icon: '#i-check', n: `${checkDays}日`, l: '薪棚の記録' });
+    if (monthMaint.length > 0) items.push({ badge: 'b-stove', icon: '#i-wrench', n: `${monthMaint.length}回`, l: 'メンテナンス' });
+    summaryEl.innerHTML = items.length
+      ? `<div class="label-sm" style="margin-bottom:8px">今月のまとめ</div><div class="cal-summary-grid">${items
+          .map(
+            (it) =>
+              `<div class="cal-summary-item"><span class="cal-event-badge ${it.badge}"><svg class="icon" viewBox="0 0 24 24"><use href="${it.icon}"/></svg></span><span class="txt"><div class="n">${it.n}</div><div class="l">${it.l}</div></span></div>`
+          )
+          .join('')}</div>`
       : `<div class="empty" style="padding:6px 4px">まだ記録のない月です。火を焚いたり、薪仕事を記録するとここに残ります。</div>`;
   }
 

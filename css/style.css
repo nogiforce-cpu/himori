@@ -19,6 +19,35 @@
   --rain:#7FA6C9;
   --radius:12px;
   --font-scale:1;
+
+  /* ---- HIMORI Design System(2026-08-28、カレンダーを基準画面として導入) ----
+     「機能として分かる」から「触りたくなる」への進化のための土台。まずカレンダー
+     画面にのみ適用し、実機確認のうえで他画面へ展開するかを判断する(全画面には
+     まだ適用しない)。既存の--ember/--green等の基礎パレットは変更せず、その上に
+     「出来事の種類ごとの意味を持つ色」を意味づけした別レイヤーとして重ねる。 */
+
+  /* 出来事の色(視覚言語): 装飾ではなく意味を持たせる。原色・ネオンは避け、
+     すべて自然物を思わせる、少しくすんだ色調に揃える。 */
+  --color-burn:var(--ember);           /* 火を焚いた: 炎のオレンジ(既存emberを流用) */
+  --color-woodwork:#C08A42;            /* 薪づくり(薪割り・薪追加): 木・黄土・薪色 */
+  --color-shelf:#6B9150;               /* 薪棚・乾燥中の薪: 深緑〜若草(--greenより深く落ち着いた緑) */
+  --color-stove:#A8876F;               /* 愛機: 鉄・灰を思わせる暖色のグレーブラウン */
+  --color-photo:#8CA46C;               /* 写真: オリーブ〜緑 */
+  --color-snow:var(--rain);            /* 雪・寒さ: 控えめな青(既存rainを流用) */
+  --color-warn:var(--red);             /* 異常・注意: 必要な時だけの警告色(既存redを流用) */
+
+  /* アイコンのサイズ階層: 一覧(カレンダーのマス目等)では中サイズ、カードではやや
+     大きく、詳細・象徴的な文脈ではさらに大きく、という階層をトークン化する。 */
+  --icon-size-list:15px;   /* カレンダーのマス目など、密度の高い一覧 */
+  --icon-size-badge:20px;  /* 凡例・行の先頭アイコンなど */
+  --icon-size-card:28px;   /* カード内で象徴的に見せる時 */
+
+  /* マイクロインタラクション: 「気づくか気づかないか程度」を数値で固定する。
+     prefers-reduced-motion時はJS側で個別に無効化するのではなく、このトークンを
+     使う各transition/animation宣言の側でmedia queryにより一括して無効化する。 */
+  --motion-fast:120ms;
+  --motion-base:180ms;
+  --motion-ease:cubic-bezier(.4,0,.2,1);
 }
 /* 文字サイズ設定(老眼など読みづらさへの配慮)。font-sizeはこの変数を掛けたcalc()に
    統一してあるので、ここを切り替えるだけで全画面の文字が一括で拡大縮小される。 */
@@ -263,33 +292,78 @@ textarea.box{width:100%;border:0;resize:none;font-family:inherit;color:var(--cre
 
 .dry-advisory{font-size:calc(11px * var(--font-scale));color:var(--green);margin-top:8px;line-height:1.6}
 
-.cal-legend{display:flex;gap:14px;font-size:calc(10px * var(--font-scale));color:var(--khaki);margin-bottom:10px;flex-wrap:wrap}
-.cal-legend span{display:flex;align-items:center;gap:4px}
+/* ================= HIMORI Design System: カレンダー(基準画面) =================
+   2026-08-28、「機能として分かる」→「触りたくなる」への第一弾。まずこの画面だけに
+   適用する(他画面は既存のまま)。実機確認のうえで他画面へ展開するか判断する。 */
+
+/* 出来事アイコンを「小さなUIアイコン」ではなく「記録を象徴する絵」として見せる
+   ための共通の入れ物。背景に意味の色を薄く敷き、アイコン自体もその色にすることで、
+   形を読み取る前に色だけでも「今日/この記録は何か」がなんとなく伝わるようにする
+   (色に意味を持たせるHIMORIの視覚言語)。カレンダーのマス目・凡例の両方で使う。 */
+.cal-event-badge{display:inline-flex;align-items:center;justify-content:center;width:calc(var(--icon-size-list) + 6px);height:calc(var(--icon-size-list) + 6px);border-radius:6px;flex-shrink:0}
+.cal-event-badge svg{width:var(--icon-size-list);height:var(--icon-size-list)}
+.cal-event-badge.b-burn{background:rgba(217,119,50,.18);color:var(--color-burn)}
+.cal-event-badge.b-woodwork{background:rgba(192,138,66,.2);color:var(--color-woodwork)}
+.cal-event-badge.b-shelf{background:rgba(107,145,80,.2);color:var(--color-shelf)}
+.cal-event-badge.b-stove{background:rgba(168,135,111,.22);color:var(--color-stove)}
+.cal-event-badge.b-photo{background:rgba(140,164,108,.2);color:var(--color-photo)}
+.cal-event-badge.b-snow{background:rgba(127,166,201,.2);color:var(--color-snow)}
+
+/* 凡例: 文字+極小アイコンの羅列から、色つきバッジ入りの丸みあるチップへ。
+   「色に意味がある」視覚言語を、カレンダーを開いた瞬間の凡例からも学べるようにする。 */
+.cal-legend{display:flex;gap:6px;font-size:calc(11px * var(--font-scale));color:var(--cream);margin-bottom:12px;flex-wrap:wrap}
+.cal-legend span{display:inline-flex;align-items:center;gap:5px;background:var(--card);border-radius:999px;padding:4px 10px 4px 4px}
+.cal-legend .cal-event-badge{width:18px;height:18px;border-radius:50%}
+.cal-legend .cal-event-badge svg{width:11px;height:11px}
+
 /* 1frは実質minmax(auto,1fr)として扱われるため、セル内の幅の広いコンテンツ(気温バッジ等)
    がある列だけ他より広がり、曜日ごとに列幅が揃わなくなる。minmax(0,1fr)にして
    コンテンツに関わらず必ず等幅になるようにする(はみ出す分はセル側で吸収する)。 */
-.cal-weekdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center;font-size:calc(10px * var(--font-scale));color:var(--muted);margin-bottom:4px}
-.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
-.cal-day{min-height:52px;border-radius:8px;background:var(--card);display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;position:relative;cursor:pointer;font-size:calc(11px * var(--font-scale));color:var(--cream);padding:4px 3px;overflow:hidden}
+.cal-weekdays{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center;font-size:calc(10px * var(--font-scale));color:var(--muted);margin-bottom:6px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;animation:calFadeIn var(--motion-base) var(--motion-ease)}
+@keyframes calFadeIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+/* カレンダー本体の背後にごく微妙な色の階調を敷き、完全なフラットブラックではなく
+   炭・深い森を思わせる奥行きを出す(文字が乗るのは不透明な--cardのマス目の上なので
+   可読性には影響しない)。他画面にはまだ適用しない、この画面だけの実験。 */
+#review-view-calendar{background:
+    radial-gradient(140% 90% at 12% 0%, rgba(107,145,80,.06), transparent 55%),
+    radial-gradient(120% 90% at 92% 100%, rgba(217,119,50,.05), transparent 60%);
+  border-radius:16px;padding:1px 1px 6px;margin:-1px -1px 0}
+.cal-day{min-height:64px;border-radius:11px;background:var(--card);display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;position:relative;cursor:pointer;font-size:calc(12px * var(--font-scale));font-weight:600;color:var(--cream);padding:6px 4px;overflow:hidden;transition:transform var(--motion-fast) var(--motion-ease),box-shadow var(--motion-fast) var(--motion-ease)}
+.cal-day:active{transform:scale(.95)}
 .cal-day.empty{background:transparent;cursor:default;min-height:0}
-.cal-day.today{box-shadow:0 0 0 1.5px var(--green) inset}
-.cal-day.last-burn{box-shadow:0 0 0 1.5px var(--ember) inset}
-.cal-day.warn{box-shadow:0 0 0 1.5px var(--red) inset;background:rgba(181,80,46,.12)}
-.cal-day-top{display:flex;align-items:center;justify-content:space-between;line-height:1}
+/* 今日: 柔らかい緑の枠+ごく薄い緑の地色(以前の1.5px細リングだけより、その日を
+   眺めたくなる「やわらかな囲み」に近づける)。 */
+.cal-day.today{box-shadow:0 0 0 2px var(--green) inset;background:rgba(154,196,106,.1)}
+/* 火を焚いた日: セル下端にember色の帯を薄く敷き、「その日は火があった」ことを
+   アイコンを読む前の色の気配として伝える(今日/異常のリングとは別レイヤーなので
+   両方の状態が同時に起きても打ち消し合わない)。 */
+.cal-day.has-burn::before{content:'';position:absolute;left:0;right:0;bottom:0;height:55%;background:linear-gradient(to top, rgba(217,119,50,.14), transparent);pointer-events:none}
+.cal-day.last-burn{box-shadow:0 0 0 2px var(--ember) inset}
+.cal-day.today.last-burn{box-shadow:0 0 0 2px var(--green) inset, inset 0 0 0 4px rgba(217,119,50,.65)}
+.cal-day.warn{box-shadow:0 0 0 2px var(--red) inset;background:rgba(181,80,46,.14)}
+@media (prefers-reduced-motion: reduce){
+  .cal-day{transition:none}
+  .cal-day:active{transform:none}
+  .cal-grid{animation:none}
+}
+.cal-day-top{display:flex;align-items:center;justify-content:space-between;line-height:1;position:relative;z-index:1}
 .cal-season-mark{font-size:calc(9px * var(--font-scale));display:inline-flex;align-items:center}
 .cal-season-mark.cal-season-end{font-weight:700;color:var(--khaki);background:rgba(169,151,107,.18);border-radius:3px;padding:0 3px}
 .cal-season-mark.cal-plan-mark{font-weight:700;color:var(--khaki);border:1px dashed var(--khaki);border-radius:3px;padding:0 3px}
-.cal-day .cal-icons{display:flex;gap:3px;margin-top:3px;min-height:15px;justify-content:center;align-items:center}
-.cal-day .cal-icons svg{width:10px;height:10px;flex-shrink:0}
-.cal-day .cal-icons .ic-burn{color:var(--ember)}
-/* メンテ実施日は元々khaki(セル背景に近い色)で目立たなかったため、濃い背景色の
-   バッジにして視認性を上げる(焚いた日=炎アイコン単色、メンテ=バッジ、で
-   意味の重さの違いも表現できる)。セルが小さいので、他のアイコンより一回り
-   大きくして気づきやすくする。 */
-.cal-day .cal-icons .ic-maint{color:var(--bg);background:var(--green);border-radius:4px;padding:2px;width:15px;height:15px}
-.cal-day .cal-icons .ic-photo{color:var(--muted)}
-.cal-day .cal-icons .ic-woodwork{color:var(--khaki)}
-.cal-day .cal-icons .ic-shelf{color:var(--green)}
-.cal-day .cal-icons .ic-snow{color:var(--rain)}
+.cal-day .cal-icons{display:flex;gap:3px;margin-top:4px;min-height:calc(var(--icon-size-list) + 6px);justify-content:center;align-items:center;position:relative;z-index:1}
+/* その日の出来事が4件以上ある場合、3個目のバッジを「+N」チップに差し替える
+   (小さなアイコンを大量に並べて情報過多にしないため。2〜3個程度の美しい配置を保つ)。 */
+.cal-day .cal-icons .cal-more{font-size:calc(10px * var(--font-scale));font-weight:700;color:var(--khaki);background:var(--surface);border-radius:6px;padding:0 5px;height:calc(var(--icon-size-list) + 6px);display:inline-flex;align-items:center}
 
 .main-tag{font-size:calc(9px * var(--font-scale));font-weight:700;color:var(--green);border:1px solid rgba(154,196,106,.4);padding:2px 6px;border-radius:4px;margin-left:6px;white-space:nowrap;display:inline-block}
+
+/* 「今月のまとめ」: 文字の羅列からアイコン+数値の小さなカードの並びへ。分析
+   ダッシュボードにはせず、「今月こんなことをしたな」と眺められる密度に留める。 */
+.cal-summary-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.cal-summary-item{display:flex;align-items:center;gap:10px;background:var(--surface);border-radius:11px;padding:10px 11px}
+.cal-summary-item .cal-event-badge{width:34px;height:34px;border-radius:10px}
+.cal-summary-item .cal-event-badge svg{width:18px;height:18px}
+.cal-summary-item .txt{min-width:0}
+.cal-summary-item .n{font-size:calc(16px * var(--font-scale));font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
+.cal-summary-item .l{font-size:calc(10px * var(--font-scale));color:var(--khaki);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
