@@ -1,0 +1,235 @@
+{
+  "checkedAt": "2026-11-09T11:55:10.939Z",
+  "main": "16d5a8d5798841701aa04051f608bef6215ed844",
+  "url": "https://himori-pwa.netlify.app/",
+  "results": [
+    {
+      "file": "index.html",
+      "mainSha256": "dcb779d84950698869a18b8499dba590f86d8c771967b9558ce51393d8eae55f",
+      "publicSha256": "448168b52d5ea45ae6b55e5e783ff51ad33f18522788bc2fa5ff7d7160bc60ac",
+      "matches": false
+    },
+    {
+      "file": "manifest.json",
+      "mainSha256": "3b4c8d68ed1a7f537d49161c8bdeaef579bd184e3e113d8d1cda684b4c7066b1",
+      "publicSha256": "3b4c8d68ed1a7f537d49161c8bdeaef579bd184e3e113d8d1cda684b4c7066b1",
+      "matches": true
+    },
+    {
+      "file": "css/style.css",
+      "mainSha256": "5decf4398c14b08c6699a76626a25bc86ec998ff7c09f5943249221947455070",
+      "publicSha256": "5decf4398c14b08c6699a76626a25bc86ec998ff7c09f5943249221947455070",
+      "matches": true
+    },
+    {
+      "file": "js/app.js",
+      "mainSha256": "e55bbb3539f7dc17e97131b3fea0c4c9a37d8213c314b040b247226ec991aa88",
+      "publicSha256": "e55bbb3539f7dc17e97131b3fea0c4c9a37d8213c314b040b247226ec991aa88",
+      "matches": true
+    },
+    {
+      "file": "js/ui.js",
+      "mainSha256": "60f4cec4ba279ff11053ffba4e1d3b398196fa1c14b949d10e47c79052535d06",
+      "publicSha256": "60f4cec4ba279ff11053ffba4e1d3b398196fa1c14b949d10e47c79052535d06",
+      "matches": true
+    },
+    {
+      "file": "js/state.js",
+      "mainSha256": "cd5477fe2703d0a4ce742c8ccf0e50057f303b158d9ffb138f9a2e66719b569e",
+      "publicSha256": "cd5477fe2703d0a4ce742c8ccf0e50057f303b158d9ffb138f9a2e66719b569e",
+      "matches": true
+    },
+    {
+      "file": "js/store.js",
+      "mainSha256": "5ff467c758fa06074b01d0a31d6997580ff0b355565de4cc217167e1c5c8492c",
+      "publicSha256": "5ff467c758fa06074b01d0a31d6997580ff0b355565de4cc217167e1c5c8492c",
+      "matches": true
+    },
+    {
+      "file": "js/derive.js",
+      "mainSha256": "28a85b59450a07eea8597b4c6b991076c64fda31b36abc3b166c4d4b5ea289a1",
+      "publicSha256": "28a85b59450a07eea8597b4c6b991076c64fda31b36abc3b166c4d4b5ea289a1",
+      "matches": true
+    },
+    {
+      "file": "js/weather.js",
+      "mainSha256": "21ad64d72fa399e94198816d137f226e0cebce69082b5aedbd7a6469a5554ecf",
+      "publicSha256": "21ad64d72fa399e94198816d137f226e0cebce69082b5aedbd7a6469a5554ecf",
+      "matches": true
+    },
+    {
+      "file": "js/weather-v2-flag.js",
+      "mainSha256": "db444d6e92ba0ea7e427dfb97f9fd4904c67ff3a71d819663d5389541d53b4d7",
+      "publicSha256": "db444d6e92ba0ea7e427dfb97f9fd4904c67ff3a71d819663d5389541d53b4d7",
+      "matches": true
+    },
+    {
+      "file": "js/amedas.js",
+      "mainSha256": "3583676a9234c38dc31c7e550be6d46c4246acae384331adce9b79e40ef5946f",
+      "publicSha256": "3583676a9234c38dc31c7e550be6d46c4246acae384331adce9b79e40ef5946f",
+      "matches": true
+    },
+    {
+      "file": "js/fireSite.js",
+      "mainSha256": "734679ea7e414c6b6ed3d32046b910f3b42248a66fcbe2a47e1792738ed38caa",
+      "publicSha256": "734679ea7e414c6b6ed3d32046b910f3b42248a66fcbe2a47e1792738ed38caa",
+      "matches": true
+    },
+    {
+      "file": "js/date-utils.js",
+      "mainSha256": "9a43b610b119ea457d3fbf560745851b1a10da563458c37e80450b5789d3ea53",
+      "publicSha256": "9a43b610b119ea457d3fbf560745851b1a10da563458c37e80450b5789d3ea53",
+      "matches": true
+    },
+    {
+      "file": "js/onboarding.js",
+      "mainSha256": "4e6b0d3b8bc083f11ebe117fa640898f59b0175ba40f4a7f194811c79da35bab",
+      "publicSha256": "4e6b0d3b8bc083f11ebe117fa640898f59b0175ba40f4a7f194811c79da35bab",
+      "matches": true
+    },
+    {
+      "file": "js/jma.js",
+      "mainSha256": "8d74fbadd33591e68967734c42bda3fbda873ed84604eed4d229b24ca3827cf2",
+      "publicSha256": "8d74fbadd33591e68967734c42bda3fbda873ed84604eed4d229b24ca3827cf2",
+      "matches": true
+    },
+    {
+      "file": "js/photos.js",
+      "mainSha256": "2d4678ed7c1f44c13714df8c03532e392b81e305965af0ca5ee3407badf3848d",
+      "publicSha256": "2d4678ed7c1f44c13714df8c03532e392b81e305965af0ca5ee3407badf3848d",
+      "matches": true
+    },
+    {
+      "file": "js/render/home.js",
+      "mainSha256": "a31427e0715b93880e606a79975cd85d4ab193b50eb4ec0aafc83495852a8acf",
+      "publicSha256": "a31427e0715b93880e606a79975cd85d4ab193b50eb4ec0aafc83495852a8acf",
+      "matches": true
+    },
+    {
+      "file": "js/render/shelves.js",
+      "mainSha256": "ab7044bd4ef6632e77900a0725ad3b4bea8a075b93d899906fa592e7e6b33570",
+      "publicSha256": "ab7044bd4ef6632e77900a0725ad3b4bea8a075b93d899906fa592e7e6b33570",
+      "matches": true
+    },
+    {
+      "file": "js/render/check.js",
+      "mainSha256": "6c5b577d1cbbc2881f417a7f23ed4754b22b9964e80a4ea2b518e70c0ba06483",
+      "publicSha256": "6c5b577d1cbbc2881f417a7f23ed4754b22b9964e80a4ea2b518e70c0ba06483",
+      "matches": true
+    },
+    {
+      "file": "js/render/review.js",
+      "mainSha256": "d3789e4e9fcd33d8a1370976f173270e44e1be35a31271361955a0e06d3df95d",
+      "publicSha256": "d3789e4e9fcd33d8a1370976f173270e44e1be35a31271361955a0e06d3df95d",
+      "matches": true
+    },
+    {
+      "file": "js/render/album.js",
+      "mainSha256": "b728ee385ea3cb6a91c6bf7b9ad9bd5291acff2a13ce6897e6e115aaa90f6445",
+      "publicSha256": "b728ee385ea3cb6a91c6bf7b9ad9bd5291acff2a13ce6897e6e115aaa90f6445",
+      "matches": true
+    },
+    {
+      "file": "js/render/settings.js",
+      "mainSha256": "fc13fafe2194ec4add1f84c1ffa3782759b82ecacfbec9a629c4fed8ba64af49",
+      "publicSha256": "fc13fafe2194ec4add1f84c1ffa3782759b82ecacfbec9a629c4fed8ba64af49",
+      "matches": true
+    },
+    {
+      "file": "js/render/sheets.js",
+      "mainSha256": "95d2d73afe1c868a7a8b271477fb374b40cb4068f6e422a9fa030dd31db921a9",
+      "publicSha256": "95d2d73afe1c868a7a8b271477fb374b40cb4068f6e422a9fa030dd31db921a9",
+      "matches": true
+    },
+    {
+      "file": "js/render/event-row.js",
+      "mainSha256": "cd327e80aa00eb9d6df6fb6ee9aa8e38983dd4ed133dde8404fde2ddb4ce6324",
+      "publicSha256": "cd327e80aa00eb9d6df6fb6ee9aa8e38983dd4ed133dde8404fde2ddb4ce6324",
+      "matches": true
+    },
+    {
+      "file": "js/render/calendar.js",
+      "mainSha256": "ae30660281c3c7ad38f1fa019e97e101b5c0e98e416f7e375795ffc0122226ea",
+      "publicSha256": "ae30660281c3c7ad38f1fa019e97e101b5c0e98e416f7e375795ffc0122226ea",
+      "matches": true
+    },
+    {
+      "file": "js/render/season-review.js",
+      "mainSha256": "7d709ab791ac73a651466a8a19a901468861709c839f69f4df06f098234fff0d",
+      "publicSha256": "7d709ab791ac73a651466a8a19a901468861709c839f69f4df06f098234fff0d",
+      "matches": true
+    },
+    {
+      "file": "assets/logo-badge.svg",
+      "mainSha256": "0ca3a4a207ce1f949313a0adf4852fafda049a7877df33bf2ee57dbb439e74e1",
+      "publicSha256": "0ca3a4a207ce1f949313a0adf4852fafda049a7877df33bf2ee57dbb439e74e1",
+      "matches": true
+    },
+    {
+      "file": "assets/logo-icon-square.svg",
+      "mainSha256": "cc70eba136da8b8b86f735da6ec67ecfbfb1dd5d56d0501a78e8f413bc189eee",
+      "publicSha256": "cc70eba136da8b8b86f735da6ec67ecfbfb1dd5d56d0501a78e8f413bc189eee",
+      "matches": true
+    },
+    {
+      "file": "assets/icon-axe.png",
+      "mainSha256": "a2a5148a36ad186324a5441af1dd146cebbf5e7c5e6410a64bd9ca54d00f87f9",
+      "publicSha256": "a2a5148a36ad186324a5441af1dd146cebbf5e7c5e6410a64bd9ca54d00f87f9",
+      "matches": true
+    },
+    {
+      "file": "assets/icon-woodtype.png",
+      "mainSha256": "9df1182dcca9c9ab4d8b91aaf94dbf8304a23f55a6bd6b019f749ae7103e85a8",
+      "publicSha256": "9df1182dcca9c9ab4d8b91aaf94dbf8304a23f55a6bd6b019f749ae7103e85a8",
+      "matches": true
+    },
+    {
+      "file": "assets/sample-woodshelf-1.jpg",
+      "mainSha256": "3a642f32e379b13ddfad6181a780246c85f612f2e19e082568f077067f3e2a0e",
+      "publicSha256": "3a642f32e379b13ddfad6181a780246c85f612f2e19e082568f077067f3e2a0e",
+      "matches": true
+    },
+    {
+      "file": "assets/sample-woodshelf-2.jpg",
+      "mainSha256": "163971c7cef6e39cb873ff69911a98b0fb966c7aa40d1847c0ea8e65a5eb4eed",
+      "publicSha256": "163971c7cef6e39cb873ff69911a98b0fb966c7aa40d1847c0ea8e65a5eb4eed",
+      "matches": true
+    },
+    {
+      "file": "assets/sample-woodshelf-3.jpg",
+      "mainSha256": "f0748d1c6f996c78fe0edb7d53e576e36949ff75cc3c4e67a675b25b9402749b",
+      "publicSha256": "f0748d1c6f996c78fe0edb7d53e576e36949ff75cc3c4e67a675b25b9402749b",
+      "matches": true
+    },
+    {
+      "file": "assets/sample-stove.jpg",
+      "mainSha256": "924307dcc40227532aa5e001ab7d586047897b910f4c2ef2f6f6b91648e47582",
+      "publicSha256": "924307dcc40227532aa5e001ab7d586047897b910f4c2ef2f6f6b91648e47582",
+      "matches": true
+    },
+    {
+      "file": "assets/icon-192.png",
+      "mainSha256": "6abb1286bdd48dc544cc5d3aacb8e6c066ad4d94e32177ba00c12d9440d15d9e",
+      "publicSha256": "6abb1286bdd48dc544cc5d3aacb8e6c066ad4d94e32177ba00c12d9440d15d9e",
+      "matches": true
+    },
+    {
+      "file": "assets/icon-512.png",
+      "mainSha256": "53e1f4f2567a2a95e6be24fd337cdef5e8b3296304d9484d1d6b398ee9babd3d",
+      "publicSha256": "53e1f4f2567a2a95e6be24fd337cdef5e8b3296304d9484d1d6b398ee9babd3d",
+      "matches": true
+    },
+    {
+      "file": "assets/apple-touch-icon.png",
+      "mainSha256": "2eebef3f7b48ff158a0177331a89993a2f346e931779c430f7984a92e95e8924",
+      "publicSha256": "2eebef3f7b48ff158a0177331a89993a2f346e931779c430f7984a92e95e8924",
+      "matches": true
+    },
+    {
+      "file": "service-worker.js",
+      "mainSha256": "c1e268b0eddd249315835d64fd00ece06e89e3f9c8d23814f0835df03b9bf6bc",
+      "publicSha256": "c1e268b0eddd249315835d64fd00ece06e89e3f9c8d23814f0835df03b9bf6bc",
+      "matches": true
+    }
+  ]
+}

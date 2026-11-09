@@ -392,7 +392,7 @@ export function buildLivingWithWoodEvents({ shelves, woodAdditions, splitLogs, c
   });
   woodAdditions.forEach((a) => {
     events.push({
-      date: a.date,
+      id: a.id, date: a.date,
       type: 'addition',
       icon: '#i-plus',
       iconColor: 'var(--green)',
@@ -406,7 +406,7 @@ export function buildLivingWithWoodEvents({ shelves, woodAdditions, splitLogs, c
     events.push({ date: s.date, type: 'split', img: 'assets/icon-axe.png', photo: null, shelfId: null, text: s.volumeM3 ? `薪割りをしました(${s.volumeM3}m³)` : '薪割りをしました' });
   });
   checks.forEach((c) => {
-    events.push({ date: c.date, type: 'check', icon: '#i-check', photo: null, shelfId: c.shelfId, text: `${shelfName(c.shelfId)}を記録しました` });
+    events.push({ id: c.id, date: c.date, type: 'check', icon: '#i-check', photo: null, shelfId: c.shelfId, text: `${shelfName(c.shelfId)}を記録しました` });
   });
   maintenanceLogs.forEach((m) => {
     events.push({ date: m.date, type: 'maintenance', icon: '#i-wrench', photo: takePhoto(m.photoId), shelfId: null, text: `${m.type}をしました` });

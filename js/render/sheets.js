@@ -1,5 +1,6 @@
 import { openOverlay, closeOverlay, showToast, openConfirmSheet, go } from '../ui.js';
 import {
+  transaction, saveWoodAddition, saveShelfCheck, removeShelfCheck,
   getShelves,
   getShelf,
   updateBurnLog,
@@ -254,6 +255,7 @@ export function openSenseNoteSheet(burnLogId, onSaved) {
       </div>
     </div>
   `);
+  ov.querySelector("#sense-note").value = getBurnLogs().find((b) => b.id === burnLogId)?.note || "";
   ov.querySelector('#sense-note-save').addEventListener('click', () => {
     const note = ov.querySelector('#sense-note').value.trim();
     updateBurnLog(burnLogId, { note });
@@ -264,7 +266,9 @@ export function openSenseNoteSheet(burnLogId, onSaved) {
 }
 
 // ---- 薪を追加した記録モーダル ----
-export function openAddWoodModal(onSaved) {
+export function openAddWoodModal(onSaved, { splitLogId = null, date: initialDate = todayIso(), volumeM3 = 0.8, additionId = null } = {}) {
+  const editing = additionId ? getWoodAdditions().find((a) => a.id === additionId) : null;
+  if (splitLogId && getWoodAdditions().some((a) => a.splitLogId === splitLogId)) { showToast("この薪割り分は棚に記録済みです"); return; }
   const shelves = getShelves();
   if (shelves.length === 0) {
     showToast('先に「薪棚一覧」の＋から薪棚を登録してください');
@@ -272,12 +276,13 @@ export function openAddWoodModal(onSaved) {
   }
   const woodTypeOptions = getWoodTypeCatalog();
   const sourceOptions = Array.from(new Set(getWoodAdditions().map((a) => a.source).filter(Boolean)));
-  let addedVolume = 0.8;
+  let addedVolume = editing?.addedVolumeM3 ?? volumeM3;
   let photoDataUrl = null;
 
   const ov = openOverlay(`
     <div class="modal">
-      <div class="row" style="margin-bottom:14px"><span style="font-size:calc(15px * var(--font-scale));font-weight:700">薪を追加した記録</span><button class="iconbtn" data-action="close-overlay"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></div>
+      <div class="row" style="margin-bottom:14px"><span style="font-size:calc(15px * var(--font-scale));font-weight:700">${editing ? '積んだ薪を訂正' : '棚に薪を積んだ'}</span><button class="iconbtn" data-action="close-overlay"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></div>
+      ${splitLogId ? '<div class="label-sm" style="margin-bottom:10px">薪割りは記録済みです。次に、積んだ棚と量を選びます。</div>' : ''}
       <div class="leather" id="add-shelf-preview" style="border-radius:var(--radius);padding:10px;display:flex;align-items:center;gap:10px;margin-bottom:14px"></div>
       <div class="field">
         <label>追加した薪棚</label>
@@ -287,13 +292,13 @@ export function openAddWoodModal(onSaved) {
       </div>
       <div class="field">
         <label>追加日</label>
-        <input class="box" id="add-date" type="date" value="${todayIso()}">
+        <input class="box" id="add-date" type="date" value="${editing?.date || initialDate}">
       </div>
       <div class="field">
         <label>追加量</label>
         <div class="stepper">
           <button type="button" id="add-vol-minus">-</button>
-          <span style="font-weight:700" id="add-vol-label">0.80 m³</span>
+          <span style="font-weight:700" id="add-vol-label">${addedVolume.toFixed(2)} m³</span>
           <button type="button" id="add-vol-plus">+</button>
         </div>
       </div>
@@ -326,12 +331,16 @@ export function openAddWoodModal(onSaved) {
       </div>
       <div class="btn-row" style="margin-top:4px">
         <button class="btn-ghost" data-action="close-overlay">キャンセル</button>
-        <button class="btn-primary" style="flex:1" id="add-save-btn">保存する</button>
+        <button class="btn-primary" style="flex:1" id="add-save-btn">${editing ? '訂正を保存' : '棚の量を増やして保存'}</button>
       </div>
     </div>
   `);
 
   const shelfSelect = ov.querySelector('#add-shelf');
+  if (editing) {
+    shelfSelect.value = editing.shelfId;
+    for (const [field, key] of [["woodtype", "woodType"], ["source", "source"], ["price", "price"], ["memo", "memo"]]) ov.querySelector(`#add-${field}`).value = editing[key] ?? "";
+  }
   const shelfPreview = ov.querySelector('#add-shelf-preview');
   const updateShelfPreview = () => {
     const s = shelves.find((x) => x.id === shelfSelect.value);
@@ -399,31 +408,29 @@ export function openAddWoodModal(onSaved) {
     const priceRaw = ov.querySelector('#add-price').value;
     const price = priceRaw === '' ? null : Math.max(0, Number(priceRaw));
     const memo = ov.querySelector('#add-memo').value.trim();
-    const shelf = shelves.find((s) => s.id === shelfId);
+    const shelf = getShelf(shelfId);
 
     try {
-      let photoId = null;
+      const result = transaction(() => {
+      let photoId = editing?.photoId || null;
       if (photoDataUrl) {
         const photo = addPhoto({ category: '薪棚', date, uri: photoDataUrl });
         photoId = photo.id;
         updateShelf(shelfId, { photoIds: [...shelf.photoIds, photoId] });
       }
-      addWoodAddition({ shelfId, date, addedVolumeM3: addedVolume, woodType, source, price, memo, photoId });
-      const { patch, overflowM3 } = applyWoodAddition(shelf, addedVolume);
-      updateShelf(shelfId, patch);
+      const result = saveWoodAddition({ shelfId, date, addedVolumeM3: addedVolume, woodType, source, price, memo, photoId, splitLogId: editing?.splitLogId || splitLogId }, additionId);
       if (woodType && !shelf.woodTypes.includes(woodType)) {
         updateShelf(shelfId, { woodTypes: [...shelf.woodTypes, woodType] });
       }
       if (woodType) addWoodTypeToCatalog(woodType);
+      return result;
+      });
       closeOverlay();
-      showToast(
-        overflowM3 > 0
-          ? `薪棚の容量を超えるため、${overflowM3}m³分は反映されませんでした`
-          : '追加記録を保存しました'
-      );
+      const updated = getShelf(shelfId);
+      showToast(result.applies ? `${updated.name}・棚の量は${updated.usableVolumeM3}m³になりました` : "過去の追加記録を保存しました。現在の量は後の棚チェックを優先します", [], { duration: 5000 });
       onSaved && onSaved();
     } catch (e) {
-      showToast('保存に失敗しました。写真の保存容量が上限に近づいている可能性があります');
+      showToast(e.message?.includes('棚') ? e.message : '保存できませんでした。写真の容量を確認してください。記録は変更していません', [], { duration: 6000 });
     }
   });
 }
@@ -1096,6 +1103,10 @@ export function openSplitLogSheet(onSaved) {
       <button class="btn-primary" id="split-save">保存する</button>
     </div>
   `);
+  ov.querySelector("#split-save").textContent = "作業だけ記録する";
+  const next = document.createElement("button");
+  next.className = "btn-ghost"; next.id = "split-and-stack"; next.textContent = "続けて、棚に積んだ分を記録"; next.style.cssText = "width:100%;margin-top:8px";
+  ov.querySelector("#split-save").after(next);
   const label = ov.querySelector('#split-label');
   const volumeField = ov.querySelector('#split-volume-field');
   const unknownToggle = ov.querySelector('#split-unknown-toggle');
@@ -1112,13 +1123,16 @@ export function openSplitLogSheet(onSaved) {
     unknownToggle.classList.toggle('on', !volumeKnown);
     volumeField.style.display = volumeKnown ? '' : 'none';
   });
-  ov.querySelector('#split-save').addEventListener('click', () => {
-    const date = ov.querySelector('#split-date').value || todayIso();
-    addSplitLog({ date, volumeM3: volumeKnown ? volume : null });
+  const save = (stack) => {
+    const date = ov.querySelector("#split-date").value || todayIso();
+    const record = addSplitLog({ date, volumeM3: volumeKnown ? volume : null });
     closeOverlay();
-    showToast('薪割り記録を保存しました');
     onSaved && onSaved();
-  });
+    if (stack) openAddWoodModal(onSaved, { splitLogId: record.id, date, volumeM3: volumeKnown ? volume : 0.2 });
+    else showToast("薪割りを記録しました。棚の量はそのままです", [{ label: "棚に積んだ量も記録", onClick: () => openAddWoodModal(onSaved, { splitLogId: record.id, date, volumeM3: volumeKnown ? volume : 0.2 }) }], { duration: 8000 });
+  };
+  ov.querySelector("#split-save").addEventListener("click", () => save(false));
+  next.addEventListener("click", () => save(true));
 }
 
 // ---- 静的な案内シート(使い方ガイド/FAQ/カレンダー準備中) ----
@@ -1281,9 +1295,9 @@ export function openCheckEditSheet(checkId, onSaved) {
     const moistureRaw = ov.querySelector('#check-edit-moisture').value;
     const moisturePercent = moistureRaw === '' ? null : Math.max(0, Math.min(60, Number(moistureRaw)));
     const memo = ov.querySelector('#check-edit-memo').value.trim();
-    updateCheck(checkId, { date, remainingPercent: pct, usableVolumeM3, items, moisturePercent, memo });
+    const { controlsQuantity } = saveShelfCheck({ ...check, date, remainingPercent: pct, usableVolumeM3, items, moisturePercent, memo }, checkId);
     closeOverlay();
-    showToast('チェック記録を更新しました');
+    showToast(controlsQuantity ? '記録と現在の棚の量を更新しました' : '過去の記録を更新しました。現在の棚の量はそのままです');
     onSaved && onSaved();
   });
 
@@ -1293,7 +1307,7 @@ export function openCheckEditSheet(checkId, onSaved) {
       message: `${check.date}のチェック記録を削除します。この操作は元に戻せません。よろしいですか?`,
       confirmLabel: '削除する',
       onConfirm: () => {
-        deleteCheck(checkId);
+        removeShelfCheck(checkId);
         closeOverlay();
         showToast('チェック記録を削除しました');
         onSaved && onSaved();
@@ -1353,6 +1367,7 @@ export function openShelfEditSheet(shelfId, onSaved) {
     const usableVolumeM3 = Math.min(shelf.usableVolumeM3, totalVolumeM3);
     const remainingPercent = Math.round((usableVolumeM3 / totalVolumeM3) * 100);
     try {
+      transaction(() => {
       let photoIds = shelf.photoIds;
       if (photo.uri === '') {
         photoIds = [];
@@ -1363,6 +1378,7 @@ export function openShelfEditSheet(shelfId, onSaved) {
       const isMainNow = ov.querySelector('#shelf-edit-is-main').checked;
       if (isMainNow && !wasMain) updateProfile({ mainShelfId: shelfId });
       else if (!isMainNow && wasMain) updateProfile({ mainShelfId: null });
+      });
       closeOverlay();
       showToast('薪棚を更新しました');
       onSaved && onSaved();
@@ -1474,6 +1490,7 @@ export function openAddShelfSheet(onSaved) {
 
     try {
       const photoIds = [];
+      transaction(() => {
       if (photo.uri) photoIds.push(addPhoto({ category: '薪棚', date: todayIso(), uri: photo.uri }).id);
       addShelf({
         name,
@@ -1483,6 +1500,7 @@ export function openAddShelfSheet(onSaved) {
         remainingPercent: pct,
         dryingStartedAt,
         photoIds,
+      });
       });
       closeOverlay();
       showToast('薪棚を登録しました');
@@ -1537,6 +1555,7 @@ export function openStoveEditSheet(onSaved) {
     const hasCatalyst = !noCatalystBox.checked;
     const catalystReplacedAt = hasCatalyst ? catalystInput.value || null : null;
     try {
+      transaction(() => {
       let photoId = stove.photoId ?? null;
       if (photo.uri === '') {
         photoId = null;
@@ -1544,6 +1563,7 @@ export function openStoveEditSheet(onSaved) {
         photoId = addPhoto({ category: 'ストーブ', date: todayIso(), uri: photo.uri }).id;
       }
       updateProfile({ stove: { ...stove, name, purchaseDate, catalystReplacedAt, hasCatalyst, photoId } });
+      });
       closeOverlay();
       showToast('愛機を保存しました');
       onSaved && onSaved();
@@ -1722,7 +1742,7 @@ function maintenanceHistoryHtml() {
       if (entries.length === 0) {
         return `<div class="maint-group"><div class="maint-group-title">${type}</div><div class="empty" style="padding:8px 0">まだ記録がありません</div></div>`;
       }
-      const shown = entries.slice(0, 4);
+      const shown = entries;
       const rest = entries.length - shown.length;
       const photos = getPhotos();
       return `
@@ -1754,14 +1774,14 @@ function openSameDayMaintChoiceSheet({ onOverwrite, onAddNew }) {
       <button class="btn-ghost" id="maint-same-day-add" style="width:100%;margin-bottom:8px">別の記録として追加</button>
       <button class="btn-ghost" data-action="close-overlay" style="width:100%">キャンセル</button>
     </div>
-  `);
+  `, { restoreOnCancel: true });
   ov.querySelector('#maint-same-day-overwrite').addEventListener('click', () => {
-    closeOverlay();
     onOverwrite();
+    if (ov.isConnected) closeOverlay();
   });
   ov.querySelector('#maint-same-day-add').addEventListener('click', () => {
-    closeOverlay();
     onAddNew();
+    if (ov.isConnected) closeOverlay();
   });
 }
 
@@ -1828,19 +1848,17 @@ export function openMaintenanceSheet(onSaved, onClose = () => {}) {
     const customType = ov.querySelector('#maint-custom-type').value.trim();
     const type = selected === 'その他' && customType ? customType : selected;
     const memo = ov.querySelector('#maint-memo').value.trim();
-    let photoId = null;
-    try {
-      photoId = photo.uri ? addPhoto({ category: 'メンテ', date, uri: photo.uri }).id : null;
-    } catch {
-      showToast('保存に失敗しました。写真の保存容量が上限に近づいている可能性があります');
-      return;
-    }
-    const payload = { date, type, memo, photoId };
+    const payload = { date, type, memo, photoId: null };
+    const persist = (id = null) => transaction(() => {
+      payload.photoId = photo.uri ? addPhoto({ category: "メンテ", date, uri: photo.uri }).id : id ? getMaintenanceLogs().find((m) => m.id === id)?.photoId || null : null;
+      return id ? updateMaintenanceLog(id, payload) : addMaintenanceLog(payload);
+    });
 
     const finish = (message) => {
       resetForm();
       showToast(message);
-      draw();
+      if (ov.isConnected) draw();
+      else openMaintenanceSheet(onSaved, onClose);
       onSaved && onSaved();
     };
 
@@ -1848,25 +1866,25 @@ export function openMaintenanceSheet(onSaved, onClose = () => {}) {
     // 薪棚チェックと同じ考え方で確認する(別の種類のメンテを同じ日にした場合は別記録として扱う)。
     const existing = getMaintenanceLogs().find((m) => m.date === date && m.type === type);
     if (existing) {
-      const same = existing.memo === memo && existing.photoId === photoId;
+      const same = existing.memo === memo && !photo.uri;
       if (same) {
         showToast('変更がないため、記録はそのままです');
         return;
       }
       openSameDayMaintChoiceSheet({
         onOverwrite: () => {
-          updateMaintenanceLog(existing.id, payload);
+          persist(existing.id);
           finish('メンテナンス記録を更新しました');
         },
         onAddNew: () => {
-          addMaintenanceLog(payload);
+          persist();
           finish('メンテナンス記録を保存しました');
         },
       });
       return;
     }
 
-    addMaintenanceLog(payload);
+    persist();
     finish('メンテナンス記録を保存しました');
   });
   draw();

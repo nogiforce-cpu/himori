@@ -18,7 +18,7 @@ import { openOverlay, closeOverlay } from '../ui.js';
 import { eventRowHtml } from './event-row.js';
 
 function inRange(dateIso, start, end) {
-  return dateIso >= start && (!end || dateIso < end);
+  return dateIso >= start && (!end || dateIso <= end);
 }
 
 function seasonLabel(season) {

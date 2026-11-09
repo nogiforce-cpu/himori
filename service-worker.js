@@ -1,4 +1,4 @@
-const CACHE = 'himori-v59';
+const CACHE = 'himori-v60';
 const ASSETS = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const ASSETS = [
   './js/ui.js',
   './js/state.js',
   './js/store.js',
+  './js/backup.js',
   './js/derive.js',
   './js/weather.js',
   './js/weather-v2-flag.js',
@@ -40,33 +41,29 @@ const ASSETS = [
   './assets/apple-touch-icon.png',
 ];
 
+// Precache the complete release; a failed fetch keeps the old worker active.
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then(async (cache) => {
+    await cache.addAll(ASSETS.map((url) => new Request(url, { cache: 'reload' })));
+  }));
 });
-
+self.addEventListener('message', (e) => {
+  if (e.data?.type === 'ACTIVATE_UPDATE') self.skipWaiting();
+});
 self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
+  e.waitUntil(caches.keys().then((keys) => Promise.all(
+    keys.filter((key) => key.startsWith('himori-') && key !== CACHE).map((key) => caches.delete(key))
+  )).then(() => self.clients.claim()));
 });
-
-// ネットワーク優先: オンラインなら常に最新のファイル一式を取りに行き、取得できたらキャッシュを更新する。
-// 取得できた時だけキャッシュを差し替えるので、HTML・JSが新旧混ざったまま配信されることがない。
-// オフライン時のみキャッシュにフォールバックする(以前はキャッシュ優先だったため、更新後に
-// 新旧ファイルが混ざって画面が真っ白になる不具合があった)。
+// Serve the installed release as a set, including while the network is flaky.
+// A new release is fetched only by the next worker's install, never file by file.
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
-  if (url.origin !== self.location.origin) {
-    return; // 天気・位置情報APIは常にネットワークへ(キャッシュ対象外)
-  }
-  e.respondWith(
-    fetch(e.request, { cache: 'no-store' })
-      .then((res) => {
-        const resClone = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, resClone));
-        return res;
-      })
-      .catch(() => caches.match(e.request))
-  );
+  if (url.origin !== self.location.origin || e.request.method !== 'GET') return;
+  const relative = './' + url.pathname.slice(new URL('./', self.location.href).pathname.length);
+  const asset = e.request.mode === 'navigate' ? './index.html' : ASSETS.includes(relative) ? relative : null;
+  if (!asset) return;
+  e.respondWith(caches.open(CACHE).then(async (cache) =>
+    (await cache.match(asset)) || Response.error()
+  ));
 });

@@ -20,7 +20,7 @@ import {
   endCurrentSeason,
   getSeasons,
   isDemoActive,
-  addPhoto,
+  addPhoto, transaction,
 } from '../store.js';
 import {
   resolveMainShelf,
@@ -585,6 +585,8 @@ export function render() {
   document.getElementById('home-season-summary').innerHTML = seasonWoodHtml(shelves);
 
   // 第2階層直下: 「今日、焚いた」の下に、今シーズン何日火を焚いたかの振り返り
+  const burnButton = document.getElementById("btn-burn-today");
+  burnButton.innerHTML = `<svg class="icon" viewBox="0 0 24 24"><use href="#i-flame"/></svg>${burnLogs.some((b) => b.date === todayIso()) ? "今日の火を記録済み" : "今日、焚いた"}`;
   const burnDaysEl = document.getElementById('home-burn-days');
   const burnDaysText = burnDaysLine(currentSeason, previousSeason, burnLogs);
   burnDaysEl.textContent = burnDaysText;
@@ -664,16 +666,26 @@ export function handleBurnToday() {
   }
 
   const today = todayIso();
-  const log = addBurnLog({ date: today, shelfId: shelf.id, note: '' });
+  const existing = getBurnLogs().find((b) => b.date === today);
+  if (existing) {
+    showToast("今日は記録済みです", [{ label: "ひとことを残す", onClick: () => openSenseNoteSheet(existing.id, () => render()) }]);
+    return;
+  }
+  let log, createdSeason;
+  const isSeasonStart = !getCurrentSeason();
+  transaction(() => {
+  log = addBurnLog({ date: today, shelfId: shelf.id, note: '' });
   // 焚くのが久しぶりでシーズンが切れていた場合は「新しいシーズンの始まり」として
   // 少しワクワクする言い回しにする(オフシーズンの寂しさと対になる演出)
-  const isSeasonStart = !getCurrentSeason();
-  const createdSeason = isSeasonStart ? startNewSeason(today) : null;
+  createdSeason = isSeasonStart ? startNewSeason(today) : null;
+  });
   render();
 
   const undoBurn = () => {
+    transaction(() => {
     removeBurnLog(log.id);
     if (createdSeason) removeSeason(createdSeason.id);
+    });
     render();
     showToast('取り消しました');
   };
@@ -721,9 +733,11 @@ export async function editStovePhoto() {
   if (!file) return;
   const uri = await fileToResizedDataUrl(file);
   try {
-    const photo = addPhoto({ category: 'ストーブ', date: todayIso(), uri });
+    transaction(() => {
+      const photo = addPhoto({ category: 'ストーブ', date: todayIso(), uri });
     updateProfile({ stove: { ...profile.stove, photoId: photo.id } });
-    render();
+    });
+      render();
   } catch {
     showToast('保存に失敗しました。写真の保存容量が上限に近づいている可能性があります');
   }

@@ -1,10 +1,10 @@
-import { getShelf, getChecksForShelf, addCheck, updateCheck, updateShelf, addPhoto, getWeatherCache, getPhotos, getProfile, getWoodAdditions } from '../store.js';
+import { getShelf, getChecksForShelf, addCheck, updateCheck, updateShelf, addPhoto, getWeatherCache, getPhotos, getProfile, getWoodAdditions, transaction, saveShelfCheck } from '../store.js';
 import { dryFriendlyDaysCount, todayIso, DRY_MOISTURE_THRESHOLD_PERCENT, CHECKLIST_ITEMS, CHECK_STATE_LABELS, nextCheckState, shelfStatusLabel, shelfStatusNote, monthDayLabel } from '../derive.js';
 import { factualTodayNote, isWeatherCacheValid } from '../weather.js';
 import { WEATHER_V2_ENABLED } from '../weather-v2-flag.js';
 import { showToast, go, openOverlay, closeOverlay } from '../ui.js';
 import { state, ensureCurrentShelf } from '../state.js';
-import { openShelfPickerSheet, openShelfEditSheet, openCheckEditSheet, openPhotoZoomSheet, percentSliderHtml, wirePercentSlider } from './sheets.js';
+import { openAddWoodModal, openShelfPickerSheet, openShelfEditSheet, openCheckEditSheet, openPhotoZoomSheet, percentSliderHtml, wirePercentSlider } from './sheets.js';
 import { pickImageFile, fileToResizedDataUrl, noPhotoPlaceholderHtml } from '../photos.js';
 
 let checklistDraft = {};
@@ -113,8 +113,10 @@ export function render() {
     if (!file) return;
     const dataUrl = await fileToResizedDataUrl(file);
     try {
+      transaction(() => {
       const photo = addPhoto({ category: '薪棚', date: todayIso(), uri: dataUrl });
       updateShelf(shelf.id, { referencePhotoId: photo.id, photoIds: [...shelf.photoIds, photo.id] });
+      });
       render();
     } catch {
       showToast('保存に失敗しました。写真の保存容量が上限に近づいている可能性があります');
@@ -175,7 +177,7 @@ export function render() {
           const a = entry.data;
           const detail = [a.source, a.price != null ? `¥${a.price.toLocaleString()}` : null].filter(Boolean).join('・');
           return `
-            <div class="event-row">
+            <div class="event-row" data-addition-id="${a.id}" style="cursor:pointer">
               <div class="thumb icon"><svg class="icon" viewBox="0 0 24 24" style="color:var(--green)"><use href="#i-plus"/></svg></div>
               <div class="text">
                 <div>薪が${a.addedVolumeM3}m³増えました${detail ? `(${detail})` : ''}</div>
@@ -189,6 +191,10 @@ export function render() {
     row.addEventListener('click', () => {
       openCheckEditSheet(row.dataset.checkId, () => render());
     });
+  });
+
+  historyEl.querySelectorAll('[data-addition-id]').forEach((row) => {
+    row.addEventListener('click', () => openAddWoodModal(() => render(), { additionId: row.dataset.additionId }));
   });
 
   // 写真の記録: この薪棚に登録された写真を時系列で並べ、見た目の変化を
@@ -249,20 +255,20 @@ function openSameDayChoiceSheet({ existingDate, onOverwrite, onAddNew }) {
       <button class="btn-ghost" id="same-day-add" style="width:100%;margin-bottom:8px">別の記録として追加</button>
       <button class="btn-ghost" data-action="close-overlay" style="width:100%">キャンセル</button>
     </div>
-  `);
+  `, { restoreOnCancel: true });
   ov.querySelector('#same-day-overwrite').addEventListener('click', () => {
-    closeOverlay();
     onOverwrite();
+    if (ov.isConnected) closeOverlay();
   });
   ov.querySelector('#same-day-add').addEventListener('click', () => {
-    closeOverlay();
     onAddNew();
+    if (ov.isConnected) closeOverlay();
   });
 }
 
 export function saveCheck() {
   const shelfId = ensureCurrentShelf();
-  let shelf = getShelf(shelfId);
+  const shelf = getShelf(shelfId);
   if (!shelf) return;
   const memo = document.getElementById('check-memo').value.trim();
   const moistureRaw = document.getElementById('check-moisture').value;
@@ -272,21 +278,18 @@ export function saveCheck() {
   // 動かしていなければ今の残量のまま=実質的な変更なしとして扱われる。
   const pct = Math.max(0, Math.min(100, Number(document.getElementById('check-residual-pct').value)));
   const usable = Math.round(((shelf.totalVolumeM3 * pct) / 100) * 100) / 100;
-  updateShelf(shelf.id, { remainingPercent: pct, usableVolumeM3: usable });
-  shelf = getShelf(shelfId);
 
   const payload = {
     shelfId: shelf.id,
     date: todayIso(),
-    remainingPercent: shelf.remainingPercent,
-    usableVolumeM3: shelf.usableVolumeM3,
+    remainingPercent: pct,
+    usableVolumeM3: usable,
     items: { ...checklistDraft },
     moisturePercent,
     memo,
   };
 
   const finish = (message) => {
-    updateShelf(shelf.id, { lastCheckedAt: todayIso() });
     document.getElementById('check-memo').value = '';
     document.getElementById('check-moisture').value = '';
     render();
@@ -305,18 +308,18 @@ export function saveCheck() {
     openSameDayChoiceSheet({
       existingDate: todayExisting.date,
       onOverwrite: () => {
-        updateCheck(todayExisting.id, payload);
+        saveShelfCheck(payload, todayExisting.id, { currentObservation: true });
         finish('薪棚の記録を更新しました');
       },
       onAddNew: () => {
-        addCheck(payload);
+        saveShelfCheck(payload);
         finish('薪棚の今を記録しました');
       },
     });
     return;
   }
 
-  addCheck(payload);
+  saveShelfCheck(payload);
   finish('薪棚の今を記録しました');
 }
 

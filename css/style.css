@@ -367,3 +367,6 @@ textarea.box{width:100%;border:0;resize:none;font-family:inherit;color:var(--cre
 .cal-summary-item .txt{min-width:0}
 .cal-summary-item .n{font-size:calc(16px * var(--font-scale));font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
 .cal-summary-item .l{font-size:calc(10px * var(--font-scale));color:var(--khaki);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Large text should keep the name and purpose readable, including on narrow phones. */
+.album-feed .photo-card .cap .name,.cal-summary-item .l{white-space:normal;overflow-wrap:anywhere}

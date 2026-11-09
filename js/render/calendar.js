@@ -321,14 +321,14 @@ function lastYearHighlights(dateIso) {
 // (旧history-row)が見せていた情報を、event-rowの補足行として引き継ぐだけにとどめる。
 function subLineFor(e, { checks, additions, burns, maint }) {
   if (e.type === 'check') {
-    const c = checks.find((x) => x.shelfId === e.shelfId);
+    const c = checks.find((x) => x.id === e.id);
     if (!c) return '';
     const state = overallCheckState(c.items);
     const label = state === 'good' ? '良好' : state === 'attention' ? '要注意' : '異常あり';
     return `残り目安${c.remainingPercent}%・${label}`;
   }
   if (e.type === 'addition') {
-    const a = additions.find((x) => x.shelfId === e.shelfId);
+    const a = additions.find((x) => x.id === e.id);
     const parts = [];
     if (a?.source) parts.push(a.source);
     if (a?.price != null) parts.push(`¥${a.price.toLocaleString()}`);
@@ -407,7 +407,7 @@ export function openCalDay(dateIso) {
     // そのまま戻れるようにする(カレンダー本体の月表示・スクロールには触れない)。
     sections.push(
       events
-        .map((e) => eventRowHtml({ ...e, returnType: 'calendar-day', returnDate: dateIso }, subLineFor(e, { checks, additions, burns, maint })))
+        .map((e) => eventRowHtml({ ...e, returnType: 'calendar-day', returnDate: dateIso }, subLineFor(e, { checks, additions, burns, maint })) + (['addition', 'check'].includes(e.type) ? `<button class="link-btn" data-action="edit-${e.type}-record" data-id="${e.id}" data-return-date="${dateIso}">この記録を訂正</button>` : ''))
         .join('')
     );
   }

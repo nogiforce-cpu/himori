@@ -94,7 +94,7 @@ export function render() {
   document.getElementById('settings-demo').innerHTML = demoActive
     ? `<div class="settings-row" style="color:var(--ember)"><span>デモデータを表示中です</span></div>
        <div class="settings-row" data-action="reset-demo-data"><span>デモデータをリセット</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>`
-    : `<div class="settings-row" data-action="load-demo-data"><span>デモデータを試す(1シーズン分)</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>`;
+    : `<div class="settings-row" data-action="load-demo-data"><span>デモデータを試す(2シーズン分)</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>`;
 
   const backupDescEl = document.getElementById('settings-backup-desc');
   if (backupDescEl) {
@@ -108,6 +108,7 @@ export function render() {
     }
   }
 
+  document.getElementById("settings-support").insertAdjacentHTML("beforeend", '<div class="label-sm" style="margin-top:14px">火守 HIMORI · v60</div>');
   updateAppBadge();
 }
 

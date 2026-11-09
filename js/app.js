@@ -5,12 +5,12 @@ import * as review from './render/review.js';
 import * as album from './render/album.js';
 import * as settings from './render/settings.js';
 import * as calendar from './render/calendar.js';
-import { openAddWoodModal, openAddShelfSheet, openWoodTypeCollectionSheet, openWoodTypeDetailSheet, openStoveDetailSheet, openInfoSheet } from './render/sheets.js';
+import { openAddWoodModal, openCheckEditSheet, openAddShelfSheet, openWoodTypeCollectionSheet, openWoodTypeDetailSheet, openStoveDetailSheet, openInfoSheet } from './render/sheets.js';
 import { openSeasonReviewSheet } from './render/season-review.js';
 import { seedIfEmpty, getProfile, getShelves, getNotificationHistory } from './store.js';
 import { ensureWeatherFresh, maybeNotifyWeather, maybeNotifyChimney, maybeNotifyShelfCheck } from './weather.js';
 import { maybeStartOnboarding } from './onboarding.js';
-import { go, openMenu, closeMenu, onNavigate } from './ui.js';
+import { go, openMenu, closeMenu, onNavigate, installActionErrorBoundary, showToast } from './ui.js';
 import { ensureCurrentShelf, state } from './state.js';
 
 // 各画面のrenderを個別にtry/catchする: 1画面の不具合が他画面の表示まで巻き込んで
@@ -34,7 +34,8 @@ async function refreshWeatherAndNotify() {
   maybeNotifyChimney(profile.nextChimneyCleaning, profile.notificationsEnabled);
   maybeNotifyShelfCheck(getShelves(), profile.notificationsEnabled);
   home.render();
-  check.render();
+  // Weather must not rebuild a form while someone is checking their shelf.
+  if (!document.querySelector('.screen[data-tab="check"].active')) check.render();
 }
 
 // カレンダー画面内の「カレンダー / 週次まとめ」切り替え。カレンダーは以前メニューの奥にしか
@@ -165,6 +166,8 @@ function wireStatic() {
 }
 
 const ACTIONS = {
+  'edit-addition-record': (el) => openAddWoodModal(renderAll, { additionId: el.dataset.id }),
+  'edit-check-record': (el) => openCheckEditSheet(el.dataset.id, renderAll),
   'open-add-shelf': () => openAddShelfSheet(renderAll),
   'open-woodtypes': () => openWoodTypeCollectionSheet(),
   // 樹種詳細の「戻る」は、開いた場所ごとに軽量な戻り先(returnType/returnDate)を
@@ -251,14 +254,23 @@ function wireDelegatedActions() {
 async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   try {
-    await navigator.serviceWorker.register('./service-worker.js');
-    // 新しいService Workerが有効になったタイミングで、キャッシュの新旧が混ざった状態の
-    // まま古いJS/HTMLの組み合わせで動き続けることがないよう、1回だけ自動リロードする。
-    let reloaded = false;
+    const registration = await navigator.serviceWorker.register('./service-worker.js');
+    let accepted = false;
+    const offer = () => {
+      if (!registration.waiting || !navigator.serviceWorker.controller) return;
+      showToast('火守の新しい版を用意できました。入力を保存してから更新できます', [{
+        label: '保存を終えたので更新', onClick: () => {
+          accepted = true;
+          registration.waiting?.postMessage({ type: 'ACTIVATE_UPDATE' });
+        },
+      }], { duration: 60000 });
+    };
+    offer();
+    registration.addEventListener('updatefound', () => {
+      registration.installing?.addEventListener('statechange', offer);
+    });
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (reloaded) return;
-      reloaded = true;
-      location.reload();
+      if (accepted) location.reload();
     });
   } catch {
     // オフライン対応が効かないだけなので致命的ではない
@@ -271,6 +283,7 @@ function maybeShowOnboarding() {
 
 function boot() {
   try {
+    installActionErrorBoundary();
     seedIfEmpty();
     settings.initTheme();
     ensureCurrentShelf();
@@ -288,7 +301,7 @@ function boot() {
     if (app) {
       app.insertAdjacentHTML(
         'afterbegin',
-        '<div style="position:fixed;inset:0;z-index:999;background:#0B0D0A;color:#F2EAD6;padding:24px;font-size:calc(13px * var(--font-scale));line-height:1.7">読み込みに失敗しました。ページを再読み込みしても直らない場合は、ブラウザのサイトデータ(キャッシュ)を削除してから開き直してください。</div>'
+        '<div style="position:fixed;inset:0;z-index:999;background:#0B0D0A;color:#F2EAD6;padding:24px;font-size:calc(13px * var(--font-scale));line-height:1.7">読み込みに失敗しました。ページを再読み込みしても直らない場合は、保存データを消さずにバックアップを保管し、サポートへお問い合わせください。</div>'
       );
     }
   }

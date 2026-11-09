@@ -1,5 +1,6 @@
 // himori.* localStorageの薄いCRUDラッパー + 初回シード
 import { localIsoDate } from './date-utils.js';
+import { validateBackup } from './backup.js';
 
 const KEYS = {
   profile: 'himori.profile',
@@ -33,6 +34,128 @@ function readJSON(key, fallback) {
 // 呼び出し元(UI層)がtry/catchでユーザーに分かる形のエラー表示ができるよう、そのまま投げる。
 function writeJSON(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
+}
+
+// All related writes either finish or return to their original values. Synchronous
+// localStorage writes cannot interleave with another event in this document.
+let inTransaction = false;
+export function transaction(action) {
+  if (inTransaction) return action();
+  const before = Object.fromEntries(Object.values(KEYS).map((k) => [k, localStorage.getItem(k)]));
+  inTransaction = true;
+  try {
+    return action();
+  } catch (error) {
+    const changed = Object.keys(before).filter((k) => localStorage.getItem(k) !== before[k]);
+    changed.forEach((k) => localStorage.removeItem(k));
+    changed.forEach((k) => { if (before[k] !== null) localStorage.setItem(k, before[k]); });
+    throw error;
+  } finally {
+    inTransaction = false;
+  }
+}
+
+export function saveShelfCheck(payload, id = null, { currentObservation = false } = {}) {
+  return transaction(() => {
+    const shelf = getShelf(payload.shelfId);
+    if (!shelf) throw new Error('薪棚が見つかりません');
+    const previous = id ? getChecks().find((c) => c.id === id) : null;
+    const controlsQuantity = currentObservation || !previous || checkControlsQuantity(previous, shelf);
+    const entry = { ...payload, previousQuantity: previous?.previousQuantity || {
+      usableVolumeM3: shelf.usableVolumeM3, remainingPercent: shelf.remainingPercent,
+      quantityCheckId: shelf.quantityCheckId || null, lastCheckedAt: shelf.lastCheckedAt,
+    } };
+    if (previous && currentObservation) {
+      const delta = shelf.usableVolumeM3 - previous.usableVolumeM3;
+      const baseVolume = Math.round((entry.previousQuantity.usableVolumeM3 + delta) * 100) / 100;
+      entry.previousQuantity = { ...entry.previousQuantity, usableVolumeM3: baseVolume, remainingPercent: Math.round(baseVolume / shelf.totalVolumeM3 * 100) };
+      // These additions are now included in an absolute observation. Corrections
+      // to them must not add the same wood on top of today's measured amount.
+      writeJSON(KEYS.woodAdditions, getWoodAdditions().map((a) => a.shelfId === shelf.id && a.quantityCheckId === (shelf.quantityCheckId || null)
+        ? { ...a, quantityCheckId: '__history__' } : a));
+    }
+    const record = id ? updateCheck(id, entry) : addCheck(entry);
+    const volume = Math.round((payload.usableVolumeM3 + (previous && !currentObservation ? shelf.usableVolumeM3 - previous.usableVolumeM3 : 0)) * 100) / 100;
+    if (controlsQuantity && (volume < 0 || volume > shelf.totalVolumeM3)) throw new Error('現在の棚の量が容量の範囲を超えます');
+    if (controlsQuantity) updateShelf(shelf.id, {
+      usableVolumeM3: volume, remainingPercent: Math.round(volume / shelf.totalVolumeM3 * 100),
+      lastCheckedAt: payload.date, quantityCheckId: record.id,
+    });
+    return { record, controlsQuantity };
+  });
+}
+
+function checkControlsQuantity(check, shelf) {
+  if ('quantityCheckId' in shelf) return shelf.quantityCheckId === check.id;
+  // Legacy data has no marker. Only the matching latest observation is safe.
+  return getChecksForShelf(shelf.id)[0]?.id === check.id &&
+    !getWoodAdditions().some((a) => a.shelfId === shelf.id && a.date >= check.date) &&
+    shelf.usableVolumeM3 === check.usableVolumeM3;
+}
+
+export function removeShelfCheck(id) {
+  return transaction(() => {
+    const check = getChecks().find((c) => c.id === id);
+    if (!check) return;
+    const shelf = getShelf(check.shelfId);
+    if (shelf && checkControlsQuantity(check, shelf)) {
+      if (!check.previousQuantity) throw new Error('以前の残量が不明です。現在の残量を棚チェックで記録してから削除してください');
+      const volume = Math.round((check.previousQuantity.usableVolumeM3 + shelf.usableVolumeM3 - check.usableVolumeM3) * 100) / 100;
+      if (volume < 0 || volume > shelf.totalVolumeM3) throw new Error('現在の残量を棚チェックで記録してから削除してください');
+      updateShelf(shelf.id, { ...check.previousQuantity, usableVolumeM3: volume, remainingPercent: Math.round(volume / shelf.totalVolumeM3 * 100) });
+      writeJSON(KEYS.woodAdditions, getWoodAdditions().map((a) => a.quantityCheckId === id
+        ? { ...a, quantityCheckId: check.previousQuantity.quantityCheckId || null } : a));
+    }
+    deleteCheck(id);
+  });
+}
+
+export function saveWoodAddition(entry, id = null) {
+  return transaction(() => {
+    const list = getWoodAdditions();
+    const previous = id ? list.find((a) => a.id === id) : null;
+    if (entry.splitLogId && list.some((a) => a.id !== id && a.splitLogId === entry.splitLogId)) throw new Error('この薪割り分は棚に記録済みです');
+    if (id && !previous) throw new Error('追加記録が見つかりません');
+    const shelf = getShelf(entry.shelfId);
+    if (!shelf || !Number.isFinite(entry.addedVolumeM3) || entry.addedVolumeM3 <= 0) throw new Error('薪棚と追加量を確認してください');
+    // A later shelf observation is an absolute measurement, so earlier additions
+    // are historical only. Do not add the same wood on top of that observation.
+    const affects = (a, s) => s && (a.quantityCheckId !== undefined
+      ? a.quantityCheckId === (s.quantityCheckId || null)
+      : !getChecksForShelf(s.id).some((c) => c.date >= a.date));
+    const deltas = new Map();
+    if (previous) {
+      const oldShelf = getShelf(previous.shelfId);
+      if (affects(previous, oldShelf)) deltas.set(oldShelf.id, -(previous.appliedVolumeM3 ?? previous.addedVolumeM3));
+    }
+    const quantityCheckId = shelf.quantityCheckId || null;
+    const applies = previous && previous.shelfId === entry.shelfId && previous.date === entry.date
+      ? affects(previous, shelf)
+      : !getChecksForShelf(shelf.id).some((c) => c.date > entry.date);
+    if (applies) deltas.set(shelf.id, (deltas.get(shelf.id) || 0) + entry.addedVolumeM3);
+    for (const [shelfId, delta] of deltas) {
+      const s = getShelf(shelfId);
+      const volume = Math.round((s.usableVolumeM3 + delta) * 100) / 100;
+      if (volume < 0 || volume > s.totalVolumeM3) throw new Error('棚の量が容量の範囲を超えます。追加量か棚のサイズを確認してください');
+      updateShelf(shelfId, { usableVolumeM3: volume, remainingPercent: Math.round(volume / s.totalVolumeM3 * 100) });
+    }
+    const record = { ...previous, ...entry, quantityCheckId: applies ? quantityCheckId : '__history__', appliedVolumeM3: applies ? entry.addedVolumeM3 : 0 };
+    if (previous) writeJSON(KEYS.woodAdditions, list.map((a) => a.id === id ? record : a));
+    else Object.assign(record, addWoodAddition(record));
+    if (entry.photoId) {
+      writeJSON(KEYS.photos, getPhotos().map((p) => p.id === entry.photoId ? { ...p, date: entry.date } : p));
+      if (previous && previous.shelfId !== entry.shelfId) {
+        const oldShelf = getShelf(previous.shelfId);
+        if (oldShelf) updateShelf(oldShelf.id, {
+          photoIds: oldShelf.photoIds.filter((pid) => pid !== entry.photoId),
+          referencePhotoId: oldShelf.referencePhotoId === entry.photoId ? null : oldShelf.referencePhotoId,
+        });
+      }
+      const destination = getShelf(entry.shelfId);
+      if (!destination.photoIds.includes(entry.photoId)) updateShelf(destination.id, { photoIds: [...destination.photoIds, entry.photoId] });
+    }
+    return { record, applies };
+  });
 }
 
 function uid(prefix) {
@@ -84,6 +207,8 @@ function seedIfEmpty() {
   writeJSON(KEYS.seasons, []);
   writeJSON(KEYS.woodTypeCatalog, []);
   writeJSON(KEYS.woodTypeDetails, {});
+  writeJSON(KEYS.weatherHistory, []);
+  writeJSON(KEYS.notificationHistory, []);
 }
 
 // 既存ユーザーが以前のバージョンのデータを持っている場合に、新しいフィールドを
@@ -188,7 +313,7 @@ export function getChecks() {
 export function getChecksForShelf(shelfId) {
   return getChecks()
     .filter((c) => c.shelfId === shelfId)
-    .sort((a, b) => (a.date < b.date ? 1 : -1));
+    .sort((a, b) => a.date === b.date ? 0 : a.date < b.date ? 1 : -1);
 }
 export function addCheck(check) {
   const checks = getChecks();
@@ -258,6 +383,7 @@ export function addPhoto(photo) {
 // 写真の削除時、薪棚・ストーブ・メンテ記録側に残ったIDへの参照も一緒に外す
 // (参照だけ残ると、存在しない写真を表示しようとして空白になるため)
 export function deletePhoto(id) {
+  return transaction(() => {
   writeJSON(KEYS.photos, getPhotos().filter((p) => p.id !== id));
 
   const shelves = getShelves();
@@ -267,6 +393,7 @@ export function deletePhoto(id) {
       s.photoIds = s.photoIds.filter((pid) => pid !== id);
       shelvesChanged = true;
     }
+    if (s.referencePhotoId === id) { s.referencePhotoId = null; shelvesChanged = true; }
   });
   if (shelvesChanged) setShelves(shelves);
 
@@ -282,6 +409,8 @@ export function deletePhoto(id) {
       maintenanceLogs.map((m) => (m.photoId === id ? { ...m, photoId: null } : m))
     );
   }
+  writeJSON(KEYS.woodAdditions, getWoodAdditions().map((a) => a.photoId === id ? { ...a, photoId: null } : a));
+  });
 }
 
 // ---- Weather cache ----
@@ -700,8 +829,9 @@ export function exportAllData() {
   return out;
 }
 export function importAllData(data) {
-  Object.entries(data).forEach(([k, v]) => {
-    if (Object.values(KEYS).includes(k)) writeJSON(k, v);
+  const validated = validateBackup(data, KEYS);
+  transaction(() => {
+    Object.entries(validated).forEach(([k, v]) => writeJSON(k, v));
   });
 }
 

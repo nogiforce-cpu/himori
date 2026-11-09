@@ -64,19 +64,21 @@ export function closeMenu() {
 }
 
 // 汎用オーバーレイ(モーダル/シート)を#modal-rootに描画する
-export function openOverlay(html, { sheet = true } = {}) {
+export function openOverlay(html, { sheet = true, restoreOnCancel = false } = {}) {
   const root = document.getElementById('modal-root');
+  const previous = restoreOnCancel ? Array.from(root.childNodes) : [];
+  const cancel = () => { root.replaceChildren(...previous); };
   const ov = document.createElement('div');
   ov.className = 'overlay active';
   ov.dataset.dynamicOverlay = 'true';
   ov.onclick = (e) => {
-    if (e.target === ov) closeOverlay();
+    if (e.target === ov) cancel();
   };
   ov.innerHTML = html;
   root.innerHTML = '';
   root.appendChild(ov);
   ov.querySelectorAll('[data-action="close-overlay"]').forEach((btn) => {
-    btn.addEventListener('click', () => closeOverlay());
+    btn.addEventListener('click', cancel);
   });
   return ov;
 }
@@ -96,9 +98,24 @@ export function openConfirmSheet({ title, message, confirmLabel = '実行する'
       <button class="btn-primary" id="confirm-sheet-ok" style="margin-bottom:8px">${confirmLabel}</button>
       <button class="btn-ghost" data-action="close-overlay" style="width:100%">${cancelLabel}</button>
     </div>
-  `);
+  `, { restoreOnCancel: true });
   ov.querySelector('#confirm-sheet-ok').addEventListener('click', () => {
-    closeOverlay();
     onConfirm();
+    if (ov.isConnected) closeOverlay();
+  });
+}
+
+// A failed save must leave the form available for retry.
+export function installActionErrorBoundary() {
+  window.addEventListener("error", (event) => {
+    if (!event.error) return;
+    console.error('[himori] 操作を完了できませんでした', event.error);
+    showToast(event.error.message || "保存できませんでした。入力を確認して、もう一度お試しください", [], { duration: 6000 });
+    event.preventDefault();
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    console.error('[himori] 非同期処理を完了できませんでした', event.reason);
+    showToast("処理を完了できませんでした。入力を確認して、もう一度お試しください", [], { duration: 6000 });
+    event.preventDefault();
   });
 }

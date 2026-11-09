@@ -1,0 +1,212 @@
+{
+  "himori.profile": {
+    "userName": "ゲスト",
+    "stove": {
+      "name": "Jøtul F 400",
+      "purchaseDate": "2022-11-10",
+      "catalystReplacedAt": null
+    },
+    "unit": "m3",
+    "safetyLineM3": 2.2,
+    "seasonTargetM3": 4.6,
+    "mainShelfId": "shelf-1",
+    "notificationsEnabled": false,
+    "theme": "dark",
+    "postalCode": null,
+    "location": null,
+    "nextChimneyCleaning": null
+  },
+  "himori.shelves": [
+    {
+      "id": "shelf-1",
+      "name": "第1薪棚(メイン)",
+      "status": "乾燥済み",
+      "remainingPercent": 70,
+      "usableVolumeM3": 1.8,
+      "totalVolumeM3": 2.6,
+      "lastCheckedAt": "2026-11-03",
+      "dryingStartedAt": "2025-12-14",
+      "estimatedDaysLeft": 38,
+      "woodTypes": [
+        "広葉樹(ミックス)"
+      ],
+      "photoIds": [
+        "photo-sample-1"
+      ]
+    },
+    {
+      "id": "shelf-2",
+      "name": "第2薪棚(北側)",
+      "status": "乾燥中",
+      "remainingPercent": 40,
+      "usableVolumeM3": 0.8,
+      "totalVolumeM3": 2,
+      "lastCheckedAt": "2026-11-06",
+      "dryingStartedAt": "2026-07-12",
+      "estimatedDaysLeft": 18,
+      "woodTypes": [
+        "針葉樹"
+      ],
+      "photoIds": [
+        "photo-sample-2"
+      ]
+    },
+    {
+      "id": "shelf-3",
+      "name": "南側薪棚(来季用)",
+      "status": "来季用",
+      "remainingPercent": 65,
+      "usableVolumeM3": 1.2,
+      "totalVolumeM3": 1.8,
+      "lastCheckedAt": "2026-11-02",
+      "dryingStartedAt": "2026-06-02",
+      "estimatedDaysLeft": 90,
+      "woodTypes": [
+        "広葉樹(ミックス)"
+      ],
+      "photoIds": [
+        "photo-sample-3"
+      ]
+    },
+    {
+      "id": "shelf-4",
+      "name": "薪小屋(予備)",
+      "status": "乾燥中",
+      "remainingPercent": 30,
+      "usableVolumeM3": 0.6,
+      "totalVolumeM3": 2,
+      "lastCheckedAt": "2026-10-30",
+      "dryingStartedAt": "2026-03-14",
+      "estimatedDaysLeft": 14,
+      "woodTypes": [
+        "広葉樹(ミックス)",
+        "針葉樹"
+      ],
+      "photoIds": []
+    }
+  ],
+  "himori.checks": [
+    {
+      "id": "check-001",
+      "shelfId": "shelf-1",
+      "date": "2026-11-03",
+      "remainingPercent": 70,
+      "usableVolumeM3": 1.8,
+      "items": {
+        "dryness": "good",
+        "pestMold": "good",
+        "leakMoisture": "good",
+        "airflow": "good",
+        "stackCondition": "good"
+      },
+      "moisturePercent": null,
+      "memo": ""
+    },
+    {
+      "id": "check-002",
+      "shelfId": "shelf-1",
+      "date": "2026-10-28",
+      "remainingPercent": 75,
+      "usableVolumeM3": 2,
+      "items": {
+        "dryness": "good",
+        "pestMold": "good",
+        "leakMoisture": "good",
+        "airflow": "good",
+        "stackCondition": "good"
+      },
+      "moisturePercent": 18,
+      "memo": ""
+    },
+    {
+      "id": "check-003",
+      "shelfId": "shelf-1",
+      "date": "2026-10-21",
+      "remainingPercent": 80,
+      "usableVolumeM3": 2.1,
+      "items": {
+        "dryness": "good",
+        "pestMold": "good",
+        "leakMoisture": "good",
+        "airflow": "good",
+        "stackCondition": "good"
+      },
+      "moisturePercent": 19,
+      "memo": ""
+    }
+  ],
+  "himori.burnLogs": [
+    {
+      "id": "burn-001",
+      "date": "2026-11-06",
+      "shelfId": "shelf-1",
+      "note": ""
+    },
+    {
+      "id": "burn-002",
+      "date": "2026-11-09",
+      "shelfId": "shelf-1",
+      "note": ""
+    }
+  ],
+  "himori.woodAdditions": [
+    {
+      "id": "add-001",
+      "shelfId": "shelf-1",
+      "date": "2026-11-07",
+      "addedVolumeM3": 0.8,
+      "woodType": "広葉樹(ミックス)",
+      "memo": "週末に薪を補充しました。",
+      "photoId": null
+    }
+  ],
+  "himori.photos": [
+    {
+      "id": "photo-sample-1",
+      "category": "薪棚",
+      "date": "2026-11-03",
+      "uri": "assets/sample-woodshelf-1.jpg"
+    },
+    {
+      "id": "photo-sample-2",
+      "category": "薪棚",
+      "date": "2026-11-06",
+      "uri": "assets/sample-woodshelf-2.jpg"
+    },
+    {
+      "id": "photo-sample-3",
+      "category": "薪棚",
+      "date": "2026-11-02",
+      "uri": "assets/sample-woodshelf-3.jpg"
+    },
+    {
+      "id": "photo-sample-stove",
+      "category": "ストーブ",
+      "date": "2026-10-10",
+      "uri": "assets/sample-stove.jpg"
+    }
+  ],
+  "himori.weatherCache": null,
+  "himori.splitLogs": [],
+  "himori.anshinHistory": [],
+  "himori.maintenanceLogs": [
+    {
+      "id": "maint-001",
+      "date": "2026-04-23",
+      "type": "煙突掃除",
+      "memo": ""
+    }
+  ],
+  "himori.seasons": [
+    {
+      "id": "season-1",
+      "startDate": "2026-06-12",
+      "endDate": null
+    }
+  ],
+  "himori.woodTypeCatalog": [
+    "広葉樹(ミックス)",
+    "針葉樹"
+  ],
+  "himori.weatherHistory": null
+}
