@@ -179,9 +179,9 @@ svg.icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;s
 .bottomnav{display:flex;border-top:1px solid var(--surface);background:var(--card);padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px))}
 .navitem{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;background:transparent;border:0;color:var(--muted);font-size:calc(10px * min(var(--font-scale), 1.15));white-space:nowrap;cursor:pointer;min-height:44px}
 .navitem.active{color:var(--green)}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-end;z-index:50;max-width:480px;margin:0 auto}
+.overlay{position:fixed;inset:auto 0;top:var(--input-viewport-top,0px);height:var(--input-viewport-height,100dvh);background:rgba(0,0,0,.55);display:none;align-items:flex-end;z-index:50;max-width:480px;margin:0 auto;overscroll-behavior:contain}
 .overlay.active{display:flex}
-.sheet{width:100%;background:var(--card);border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));max-height:82vh;overflow-y:auto}
+.sheet{width:100%;min-height:0;background:var(--card);border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));max-height:min(82dvh,calc(var(--input-viewport-height,100dvh) - 12px));overflow-y:auto;overscroll-behavior:contain;scroll-padding:16px}
 .sheet-title{font-size:calc(13px * var(--font-scale));color:var(--khaki);font-weight:700;margin-bottom:10px}
 /* 初回セットアップ(iOSの初期設定のような1画面1テーマの案内)用のシート装飾 */
 .ob-sheet{padding-top:22px}
@@ -193,11 +193,17 @@ svg.icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;s
 .sheet-item{display:flex;align-items:center;gap:12px;padding:13px 4px;font-size:calc(14px * var(--font-scale));border-bottom:1px solid #262922;cursor:pointer;min-height:44px}
 .sheet-item:last-child{border-bottom:0}
 .sheet-item svg.icon{color:var(--khaki)}
-.modal{width:100%;max-width:480px;margin:0 auto;background:var(--card);border-radius:16px 16px 0 0;padding:16px;max-height:88vh;overflow-y:auto}
+.modal{width:100%;min-height:0;max-width:480px;margin:0 auto;background:var(--card);border-radius:16px 16px 0 0;padding:16px;max-height:min(88dvh,calc(var(--input-viewport-height,100dvh) - 12px));overflow-y:auto;overscroll-behavior:contain;scroll-padding:16px}
 .field{margin-bottom:12px}
 .field label{display:block;font-size:calc(11px * var(--font-scale));color:var(--khaki);margin-bottom:6px;font-weight:700}
 .field .box{background:var(--surface);border-radius:9px;padding:11px 12px;font-size:calc(13px * var(--font-scale));display:flex;justify-content:space-between;align-items:center;gap:8px}
 .field select.box,.field input.box{width:100%;border:0;color:var(--cream);font-family:inherit;appearance:none}
+.field input.box,.field select.box,.field textarea.box,textarea.box{min-width:0;max-width:100%;font-size:max(16px,calc(13px * var(--font-scale)))}
+.input-dismiss{display:none;position:sticky;top:0;z-index:2;margin:0 0 8px auto;min-height:44px;padding:8px 12px;background:var(--card);border:1px solid var(--khaki);border-radius:8px;color:var(--cream);font:inherit;font-size:16px;cursor:pointer}
+:root[data-keyboard-open] .input-dismiss{display:block}
+:root[data-keyboard-open] .sheet{padding-bottom:16px}
+:root[data-keyboard-open] .screen.active .content{padding-bottom:calc(16px + var(--keyboard-inset,0px))}
+:root[data-keyboard-open] .toast{bottom:auto;top:calc(var(--input-viewport-top,0px) + 8px);max-height:calc(var(--input-viewport-height,100dvh) - 16px);overflow-y:auto}
 .field input.box::-webkit-calendar-picker-indicator{filter:invert(0.8)}
 /* 「含水率」「残量%」のような単位付き数値入力: 数字+単位をひとまとまりの「値チップ」として
    箱の右端に寄せ、他の設定行と同じ「ラベル→値は右」の視線の流れに揃える。数字は一目で

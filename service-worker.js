@@ -1,4 +1,4 @@
-const CACHE = 'himori-v60';
+const CACHE = 'himori-v61';
 const ASSETS = [
   './',
   './index.html',
@@ -6,6 +6,7 @@ const ASSETS = [
   './css/style.css',
   './js/app.js',
   './js/ui.js',
+  './js/input-viewport.js',
   './js/state.js',
   './js/store.js',
   './js/backup.js',

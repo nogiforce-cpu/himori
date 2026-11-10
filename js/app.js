@@ -1,4 +1,5 @@
 import * as home from './render/home.js';
+import { installInputViewport } from './input-viewport.js';
 import * as shelves from './render/shelves.js';
 import * as check from './render/check.js';
 import * as review from './render/review.js';
@@ -9,7 +10,7 @@ import { openAddWoodModal, openCheckEditSheet, openAddShelfSheet, openWoodTypeCo
 import { openSeasonReviewSheet } from './render/season-review.js';
 import { seedIfEmpty, getProfile, getShelves, getNotificationHistory } from './store.js';
 import { ensureWeatherFresh, maybeNotifyWeather, maybeNotifyChimney, maybeNotifyShelfCheck } from './weather.js';
-import { maybeStartOnboarding } from './onboarding.js';
+import { maybeStartOnboarding, restartOnboarding } from './onboarding.js';
 import { go, openMenu, closeMenu, onNavigate, installActionErrorBoundary, showToast } from './ui.js';
 import { ensureCurrentShelf, state } from './state.js';
 
@@ -240,6 +241,10 @@ const ACTIONS = {
   'open-guide': () => settings.openGuide(),
   'open-faq': () => settings.openFaq(),
   'open-contact': () => settings.openContact(),
+  'restart-onboarding': () => restartOnboarding(() => {
+    renderAll();
+    refreshWeatherAndNotify();
+  }),
 };
 
 function wireDelegatedActions() {
@@ -283,6 +288,7 @@ function maybeShowOnboarding() {
 
 function boot() {
   try {
+    installInputViewport();
     installActionErrorBoundary();
     seedIfEmpty();
     settings.initTheme();

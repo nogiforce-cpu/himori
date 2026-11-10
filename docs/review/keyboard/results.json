@@ -1,0 +1,18 @@
+{
+  "browser": "157.0.8103.40",
+  "note": "VisualViewport geometry simulation, native iOS keyboard not exercised",
+  "results": [
+    "iPhone相当の表示範囲440pxで名前入力の重なりを再現し解消",
+    "ストーブ名・郵便番号・表示範囲の移動にも追従",
+    "openAddShelfSheet: 入力欄・日付・数字・メモが表示範囲内",
+    "openAddWoodModal: 入力欄・日付・数字・メモが表示範囲内",
+    "openStoveEditSheet: 入力欄・日付・数字・メモが表示範囲内",
+    "openMaintenanceSheet: 入力欄・日付・数字・メモが表示範囲内",
+    "openAddWoodTypeSheet: 入力欄・日付・数字・メモが表示範囲内",
+    "シート以外の棚チェックのメモもキーボード上へ移動",
+    "長いフォーム・特大文字・入力終了後の復帰と文字保持",
+    "横画面の小さい表示範囲でも末尾の入力欄へ到達",
+    "設定から初回案内を再表示し、薪棚を残して名前入力を再確認"
+  ],
+  "errors": []
+}

@@ -1,4 +1,5 @@
 // 画面遷移・トースト・メニュー等、共通UIヘルパー
+import { addInputDismissButton } from './input-viewport.js';
 
 const listeners = { onNavigate: [] };
 
@@ -75,6 +76,7 @@ export function openOverlay(html, { sheet = true, restoreOnCancel = false } = {}
     if (e.target === ov) cancel();
   };
   ov.innerHTML = html;
+  addInputDismissButton(ov);
   root.innerHTML = '';
   root.appendChild(ov);
   ov.querySelectorAll('[data-action="close-overlay"]').forEach((btn) => {

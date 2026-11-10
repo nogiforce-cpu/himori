@@ -85,6 +85,7 @@ export function render() {
   `;
 
   document.getElementById('settings-support').innerHTML = `
+    <div class="settings-row" data-action="restart-onboarding"><span>初回案内をもう一度見る</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
     <div class="settings-row" data-action="open-guide"><span>使い方ガイド</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
     <div class="settings-row" data-action="open-faq"><span>よくあるご質問</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
     <div class="settings-row" data-action="open-contact"><span>お問い合わせ</span><span class="v"><svg class="icon" viewBox="0 0 24 24" style="width:14px;height:14px"><use href="#i-chevright"/></svg></span></div>
@@ -108,7 +109,7 @@ export function render() {
     }
   }
 
-  document.getElementById("settings-support").insertAdjacentHTML("beforeend", '<div class="label-sm" style="margin-top:14px">火守 HIMORI · v60</div>');
+  document.getElementById("settings-support").insertAdjacentHTML("beforeend", '<div class="label-sm" style="margin-top:14px">火守 HIMORI · v61</div>');
   updateAppBadge();
 }
 

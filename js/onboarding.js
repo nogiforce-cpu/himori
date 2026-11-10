@@ -39,6 +39,12 @@ export function maybeStartOnboarding(onDone) {
   else showWelcome(onDone, offset);
 }
 
+// Revisit the setup without clearing shelves, photos, or daily records.
+export function restartOnboarding(onDone) {
+  updateProfile({ onboardingCompleted: false });
+  showWelcome(onDone);
+}
+
 function finish(onDone) {
   updateProfile({ onboardingCompleted: true });
   closeOverlay();
