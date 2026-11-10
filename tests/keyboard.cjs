@@ -9,7 +9,7 @@ const { execFileSync } = require('node:child_process');
   const browser = await launch();
   const results = [], errors = [];
   const root = path.resolve(__dirname, '..');
-  const out = path.join(root, 'docs/review/keyboard');
+  const out = path.join(root, process.env.HIMORI_KEYBOARD_QA_DIR || 'docs/review/keyboard');
   fs.mkdirSync(out, { recursive: true });
   const before = fs.mkdtempSync(path.join(os.tmpdir(), 'himori-keyboard-before-'));
   for (const file of ['index.html', 'manifest.json', 'assets', 'css', 'js']) {
@@ -96,6 +96,7 @@ const { execFileSync } = require('node:child_process');
       });
       await page.reload();
       const forms = [
+        ['openBurnRecordSheet', ['#burn-record-date', '#burn-record-note']],
         ['openAddShelfSheet', ['#new-shelf-name', '#new-shelf-total', '#new-shelf-drying-date']],
         ['openAddWoodModal', ['#add-date', '#add-woodtype', '#add-source', '#add-price', '#add-memo']],
         ['openStoveEditSheet', ['#stove-edit-name', '#stove-edit-purchase', '#stove-edit-catalyst']],

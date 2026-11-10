@@ -11,7 +11,7 @@ import {
   addPhoto,
   deletePhoto,
   getPhotos,
-  addSplitLog,
+  saveSplitRecord, saveBurnRecord,
   getWoodAdditions,
   getProfile,
   updateProfile,
@@ -35,6 +35,7 @@ import {
   CHECKLIST_ITEMS,
   CHECK_STATE_LABELS,
   nextCheckState,
+  resolveMainShelf,
   resolvePhotoShelfId,
   monthDayLabel,
   shelfStatusLabel,
@@ -43,7 +44,7 @@ import {
   firstBurnDate,
   buildLivingWithWoodEvents,
 } from '../derive.js';
-import { localIsoDate } from '../date-utils.js';
+import { localIsoDate, requireRecordDate } from '../date-utils.js';
 import { pickImageFile, fileToResizedDataUrl } from '../photos.js';
 import { resolveLocationFromCity, fetchCitiesForPrefecture, PREFECTURES } from '../weather.js';
 import { listRegionsForOffice } from '../jma.js';
@@ -241,14 +242,48 @@ export function openShelfPickerSheet(currentId, onPick) {
 }
 
 // ---- 今日焚いた:五感メモ追記シート ----
+function burnNoteFieldHtml(id) {
+  return `<div class="field"><label>炎の様子・香り・誰と焚いたかなど</label><textarea class="box" id="${id}" placeholder="よく燃えた。薪の香りが良い。"></textarea></div>`;
+}
+
+function recordDateFromField(overlay, selector) {
+  const input = overlay.querySelector(selector);
+  try { return requireRecordDate(input.value); }
+  catch (error) { showToast(error.message); input.focus(); return null; }
+}
+
+export function openBurnRecordSheet(onSaved, { date: initialDate = todayIso(), onCancel } = {}) {
+  const shelves = getShelves();
+  const { shelf } = resolveMainShelf(shelves, getProfile());
+  const ov = openOverlay(`
+    <div class="sheet">
+      <div class="row" style="margin-bottom:14px"><span class="sheet-title" style="margin:0">火を焚いた日を記録</span><button class="iconbtn" aria-label="閉じる" data-action="close-overlay"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></div>
+      <div class="field"><label>日付</label><input class="box" id="burn-record-date" type="date" value="${initialDate}" max="${todayIso()}"></div>
+      <div class="field"><label>使った薪棚（任意）</label><select class="box" id="burn-record-shelf"><option value="">指定しない</option>${shelves.map((s) => `<option value="${s.id}">${s.name}</option>`).join('')}</select></div>
+      ${burnNoteFieldHtml('burn-record-note')}
+      <div class="label-sm" style="margin-bottom:12px">焚いた日を残します。棚の量はそのままです。</div>
+      <button class="btn-primary" id="burn-record-save">記録する</button>
+    </div>
+  `, { onCancel });
+  ov.querySelector('#burn-record-shelf').value = shelf?.id || '';
+  let saved = false;
+  ov.querySelector('#burn-record-save').addEventListener('click', () => {
+    if (saved) return;
+    const date = recordDateFromField(ov, '#burn-record-date');
+    if (!date) return;
+    const result = saveBurnRecord({ date, shelfId: ov.querySelector('#burn-record-shelf').value, note: ov.querySelector('#burn-record-note').value.trim() });
+    saved = true;
+    closeOverlay();
+    onSaved?.(result.record);
+    showToast(result.duplicate ? 'この日は記録済みです。追加していません' : '火を焚いた日を記録しました');
+  });
+}
+
 export function openSenseNoteSheet(burnLogId, onSaved) {
   const ov = openOverlay(`
     <div class="sheet">
       <div class="sheet-title">ひとことを追加(任意)</div>
-      <div class="field">
-        <label>炎の様子・香り・誰と焚いたかなど</label>
-        <textarea class="box" id="sense-note" placeholder="よく燃えた。薪の香りが良い。"></textarea>
-      </div>
+      ${burnNoteFieldHtml('sense-note')}
       <div class="btn-row" style="margin-top:4px">
         <button class="btn-ghost" data-action="close-overlay">キャンセル</button>
         <button class="btn-primary" style="flex:1" id="sense-note-save">保存する</button>
@@ -1078,7 +1113,7 @@ async function maybeShowRegionPicker(location, onDone) {
 // ---- 薪割り記録 ----
 // 割った直後はすぐに積まず、量が分からないことも多いため、量の入力は任意にしてある。
 // 「量はまだ分からない」を選ぶと回数だけを記録し、量はnullで保存する。
-export function openSplitLogSheet(onSaved) {
+export function openSplitLogSheet(onSaved, { date: initialDate = todayIso(), onCancel, allowStack = true } = {}) {
   let volume = 0.2;
   let volumeKnown = true;
   const ov = openOverlay(`
@@ -1086,7 +1121,7 @@ export function openSplitLogSheet(onSaved) {
       <div class="row" style="margin-bottom:14px"><span class="sheet-title" style="margin-bottom:0">薪割りを記録</span><button class="iconbtn" data-action="close-overlay"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></div>
       <div class="field">
         <label>日付</label>
-        <input class="box" id="split-date" type="date" value="${todayIso()}">
+        <input class="box" id="split-date" type="date" value="${initialDate}" max="${todayIso()}">
       </div>
       <div class="row" style="margin-bottom:8px">
         <span class="label-sm">量はまだ分からない(あとで積んでから確認)</span>
@@ -1102,11 +1137,11 @@ export function openSplitLogSheet(onSaved) {
       </div>
       <button class="btn-primary" id="split-save">保存する</button>
     </div>
-  `);
-  ov.querySelector("#split-save").textContent = "作業だけ記録する";
+  `, { onCancel });
+  ov.querySelector("#split-save").textContent = allowStack ? "作業だけ記録する" : "薪割りを記録する";
   const next = document.createElement("button");
   next.className = "btn-ghost"; next.id = "split-and-stack"; next.textContent = "続けて、棚に積んだ分を記録"; next.style.cssText = "width:100%;margin-top:8px";
-  ov.querySelector("#split-save").after(next);
+  if (allowStack) ov.querySelector("#split-save").after(next);
   const label = ov.querySelector('#split-label');
   const volumeField = ov.querySelector('#split-volume-field');
   const unknownToggle = ov.querySelector('#split-unknown-toggle');
@@ -1123,13 +1158,21 @@ export function openSplitLogSheet(onSaved) {
     unknownToggle.classList.toggle('on', !volumeKnown);
     volumeField.style.display = volumeKnown ? '' : 'none';
   });
-  const save = (stack) => {
-    const date = ov.querySelector("#split-date").value || todayIso();
-    const record = addSplitLog({ date, volumeM3: volumeKnown ? volume : null });
+  let saved = false;
+  const save = (stack, allowDuplicate = false) => {
+    if (saved) return;
+    const date = recordDateFromField(ov, '#split-date');
+    if (!date) return;
+    const { record, duplicate } = saveSplitRecord({ date, volumeM3: volumeKnown ? volume : null }, { allowDuplicate });
+    if (duplicate) {
+      openConfirmSheet({ title: '同じ日の薪割りがあります', message: date + 'に同じ量の記録があります。別の作業として追加しますか？', confirmLabel: '別の作業として追加', onConfirm: () => save(stack, true) });
+      return;
+    }
+    saved = true;
     closeOverlay();
-    onSaved && onSaved();
+    onSaved && onSaved(record);
     if (stack) openAddWoodModal(onSaved, { splitLogId: record.id, date, volumeM3: volumeKnown ? volume : 0.2 });
-    else showToast("薪割りを記録しました。棚の量はそのままです", [{ label: "棚に積んだ量も記録", onClick: () => openAddWoodModal(onSaved, { splitLogId: record.id, date, volumeM3: volumeKnown ? volume : 0.2 }) }], { duration: 8000 });
+    else showToast("薪割りを記録しました。棚の量はそのままです", allowStack ? [{ label: "棚に積んだ量も記録", onClick: () => openAddWoodModal(onSaved, { splitLogId: record.id, date, volumeM3: volumeKnown ? volume : 0.2 }) }] : [], { duration: 5000 });
   };
   ov.querySelector("#split-save").addEventListener("click", () => save(false));
   next.addEventListener("click", () => save(true));
@@ -1765,11 +1808,11 @@ function maintenanceHistoryHtml() {
 
 // 薪棚チェックと同じ考え方: 同じ日・同じ種類の記録が既にある時、黙って上書き・黙って
 // 追加のどちらもせず選んでもらう(連打による無意味な重複と、別の記録が消える事故の両方を防ぐ)。
-function openSameDayMaintChoiceSheet({ onOverwrite, onAddNew }) {
+function openSameDayMaintChoiceSheet({ date, onOverwrite, onAddNew }) {
   const ov = openOverlay(`
     <div class="sheet">
-      <div class="sheet-title">この種類は今日すでに記録があります</div>
-      <div style="font-size:calc(13px * var(--font-scale));line-height:1.7;color:var(--cream);margin-bottom:16px">今日の記録を書き換えますか?それとも別の記録として追加しますか?</div>
+      <div class="sheet-title">この種類はこの日に記録があります</div>
+      <div style="font-size:calc(13px * var(--font-scale));line-height:1.7;color:var(--cream);margin-bottom:16px">${date}の記録を書き換えますか?それとも別の記録として追加しますか?</div>
       <button class="btn-primary" id="maint-same-day-overwrite" style="margin-bottom:8px">上書きする</button>
       <button class="btn-ghost" id="maint-same-day-add" style="width:100%;margin-bottom:8px">別の記録として追加</button>
       <button class="btn-ghost" data-action="close-overlay" style="width:100%">キャンセル</button>
@@ -1787,7 +1830,8 @@ function openSameDayMaintChoiceSheet({ onOverwrite, onAddNew }) {
 
 // onClose: 「戻る」で呼ぶコールバック(樹種詳細と同じ軽量な戻り先パターン)。
 // 省略時は従来通り、閉じたら何もしない(呼び出し元の画面がそのまま見える)。
-export function openMaintenanceSheet(onSaved, onClose = () => {}) {
+export function openMaintenanceSheet(onSaved, onClose = () => {}, { date: initialDate = todayIso(), onCancel, returnAfterSave = false } = {}) {
+  let finished = false;
   function draw() {
     const ov = document.querySelector('[data-dynamic-overlay="true"]');
     if (!ov) return;
@@ -1802,7 +1846,7 @@ export function openMaintenanceSheet(onSaved, onClose = () => {}) {
       </div>
       <div class="field">
         <label>実施日</label>
-        <input class="box" id="maint-date" type="date" value="${todayIso()}">
+        <input class="box" id="maint-date" type="date" value="${initialDate}" max="${todayIso()}">
       </div>
       <div class="field">
         <label>種類</label>
@@ -1823,7 +1867,7 @@ export function openMaintenanceSheet(onSaved, onClose = () => {}) {
       <div class="label-sm" style="margin:16px 0 8px;font-weight:700">これまでの記録</div>
       <div id="maint-history"></div>
     </div>
-  `);
+  `, { onCancel });
   ov.querySelector('#maint-sheet-close').addEventListener('click', () => {
     closeOverlay();
     onClose();
@@ -1843,7 +1887,9 @@ export function openMaintenanceSheet(onSaved, onClose = () => {}) {
   }
 
   ov.querySelector('#maint-save-btn').addEventListener('click', () => {
-    const date = ov.querySelector('#maint-date').value || todayIso();
+    if (finished) return;
+    const date = recordDateFromField(ov, '#maint-date');
+    if (!date) return;
     const selected = typeSelect.value;
     const customType = ov.querySelector('#maint-custom-type').value.trim();
     const type = selected === 'その他' && customType ? customType : selected;
@@ -1854,12 +1900,13 @@ export function openMaintenanceSheet(onSaved, onClose = () => {}) {
       return id ? updateMaintenanceLog(id, payload) : addMaintenanceLog(payload);
     });
 
-    const finish = (message) => {
+    const finish = (message, record) => {
+      if (returnAfterSave) { finished = true; closeOverlay(); onSaved?.(record); showToast(message); return; }
       resetForm();
       showToast(message);
       if (ov.isConnected) draw();
-      else openMaintenanceSheet(onSaved, onClose);
-      onSaved && onSaved();
+      else openMaintenanceSheet(onSaved, onClose, { date: initialDate, onCancel, returnAfterSave });
+      onSaved && onSaved(record);
     };
 
     // 同じ日・同じ種類の記録が既にある時は、連打でそのまま重複が増えないよう
@@ -1868,24 +1915,26 @@ export function openMaintenanceSheet(onSaved, onClose = () => {}) {
     if (existing) {
       const same = existing.memo === memo && !photo.uri;
       if (same) {
-        showToast('変更がないため、記録はそのままです');
+        if (returnAfterSave) finish('同じ記録があるため、追加していません', existing);
+        else showToast('変更がないため、記録はそのままです');
         return;
       }
       openSameDayMaintChoiceSheet({
+        date,
         onOverwrite: () => {
-          persist(existing.id);
-          finish('メンテナンス記録を更新しました');
+          const record = persist(existing.id);
+          finish('メンテナンス記録を更新しました', record);
         },
         onAddNew: () => {
-          persist();
-          finish('メンテナンス記録を保存しました');
+          const record = persist();
+          finish('メンテナンス記録を保存しました', record);
         },
       });
       return;
     }
 
-    persist();
-    finish('メンテナンス記録を保存しました');
+    const record = persist();
+    finish('メンテナンス記録を保存しました', record);
   });
   draw();
 }

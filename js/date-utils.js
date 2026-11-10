@@ -8,3 +8,11 @@ export function localIsoDate(d = new Date()) {
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
+
+export function requireRecordDate(value, today = localIsoDate()) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+      !Number.isFinite(Date.parse(value)) || new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) !== value || value > today) {
+    throw new Error('記録の日付は、今日までの実際の日付を選んでください');
+  }
+  return value;
+}

@@ -3,11 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/data.test.js",
+    "test": "node --test tests/data.test.js tests/calendar-data.test.js",
     "test:browser": "node tests/browser.cjs",
     "test:edges": "node tests/edge-browser.cjs",
     "test:pwa": "node tests/pwa.cjs",
-    "test:keyboard": "node tests/keyboard.cjs"
+    "test:keyboard": "node tests/keyboard.cjs",
+    "test:calendar": "node tests/calendar.cjs"
   },
   "devDependencies": {
     "playwright": "1.62.1"

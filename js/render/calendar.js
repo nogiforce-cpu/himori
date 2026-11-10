@@ -254,7 +254,24 @@ const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
 // dateIso自体をそのまま各所で持ち回っているので失われない。
 function dateHeadingLabel(dateIso) {
   const d = new Date(dateIso + 'T00:00:00');
-  return `${d.getMonth() + 1}月${d.getDate()}日(${WEEKDAY_LABELS[d.getDay()]})`;
+  const year = d.getFullYear() === new Date().getFullYear() ? '' : `${d.getFullYear()}年`;
+  return `${year}${d.getMonth() + 1}月${d.getDate()}日(${WEEKDAY_LABELS[d.getDay()]})`;
+}
+
+export function openRecordPicker(dateIso, onPick) {
+  if (dateIso > todayIso()) return;
+  const choices = [
+    { type: 'burn', icon: 'i-flame', label: '火を焚いた', note: '火の様子や、ひとことを残す' },
+    { type: 'split', icon: 'i-woodwork', label: '薪割り', note: '割った作業と量を残す' },
+    { type: 'maintenance', icon: 'i-wrench', label: 'お手入れ', note: '手入れの内容や写真を残す' },
+  ];
+  const ov = openOverlay(`
+    <div class="sheet">
+      <div class="row" style="margin-bottom:10px"><span class="sheet-title" style="margin:0">${dateHeadingLabel(dateIso)}の記録を追加</span><button class="iconbtn" aria-label="日別の記録に戻る" data-action="close-overlay"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button></div>
+      ${choices.map((c) => `<button class="cal-record-choice" type="button" data-record-type="${c.type}"><svg class="icon" viewBox="0 0 24 24"><use href="#${c.icon}"/></svg><span><span class="choice-label">${c.label}</span><span class="label-sm">${c.note}</span></span><svg class="icon" viewBox="0 0 24 24"><use href="#i-chevright"/></svg></button>`).join('')}
+    </div>
+  `, { onCancel: () => openCalDay(dateIso) });
+  ov.querySelectorAll('[data-record-type]').forEach((button) => button.addEventListener('click', () => onPick(button.dataset.recordType)));
 }
 
 // その日が「季節の気配」として記憶に残りそうな気象だったかを、既存のweatherHistory
@@ -335,11 +352,11 @@ function subLineFor(e, { checks, additions, burns, maint }) {
     return parts.join('・');
   }
   if (e.type === 'burn') {
-    const b = burns.find((x) => x.shelfId === e.shelfId && x.note);
+    const b = burns.find((x) => x.id === e.id);
     return b?.note || '';
   }
   if (e.type === 'maintenance') {
-    const m = maint.find((x) => `${x.type}をしました` === e.text);
+    const m = maint.find((x) => x.id === e.id);
     return m?.memo || '';
   }
   return '';
@@ -366,7 +383,7 @@ export function openCalDay(dateIso) {
   // まだ起きていない「予定」(煙突清掃日)だけは引き続き別枠のバナーで区別する。
   const milestones = [];
   if (seasonStart) {
-    milestones.push({ icon: '#i-flame', color: 'var(--ember)', text: '今季の初焚きです' });
+    milestones.push({ icon: '#i-flame', color: 'var(--ember)', text: seasonStart.endDate ? 'このシーズンの初焚きです' : '今季の初焚きです' });
   }
   if (seasonEnd) {
     milestones.push({ icon: '#i-flame', text: '今シーズンを締めた日です' });
@@ -426,6 +443,7 @@ export function openCalDay(dateIso) {
         <button class="iconbtn" data-action="close-overlay"><svg class="icon" viewBox="0 0 24 24"><use href="#i-x"/></svg></button>
       </div>
       ${sections.length ? sections.join('') : '<div class="empty">この日の記録はありません。</div>'}
+      ${dateIso <= todayIso() ? `<button class="btn-ghost" style="width:100%;margin-top:14px" data-action="add-calendar-record" data-date="${dateIso}">＋ 記録を追加</button>` : '<div class="label-sm" style="margin-top:14px">記録は今日までの日付に追加できます。</div>'}
     </div>
   `);
 }

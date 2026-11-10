@@ -10,12 +10,11 @@ import {
   getWoodTypeCatalog,
   getWoodAdditions,
   getSplitLogs,
-  addBurnLog,
+  saveBurnRecord,
   removeBurnLog,
   getWeatherCache,
   pushAnshinSnapshot,
   getCurrentSeason,
-  startNewSeason,
   removeSeason,
   endCurrentSeason,
   getSeasons,
@@ -671,14 +670,8 @@ export function handleBurnToday() {
     showToast("今日は記録済みです", [{ label: "ひとことを残す", onClick: () => openSenseNoteSheet(existing.id, () => render()) }]);
     return;
   }
-  let log, createdSeason;
-  const isSeasonStart = !getCurrentSeason();
-  transaction(() => {
-  log = addBurnLog({ date: today, shelfId: shelf.id, note: '' });
-  // 焚くのが久しぶりでシーズンが切れていた場合は「新しいシーズンの始まり」として
-  // 少しワクワクする言い回しにする(オフシーズンの寂しさと対になる演出)
-  createdSeason = isSeasonStart ? startNewSeason(today) : null;
-  });
+  const { record: log, createdSeason } = saveBurnRecord({ date: today, shelfId: shelf.id, note: '' });
+  const isSeasonStart = !!createdSeason;
   render();
 
   const undoBurn = () => {

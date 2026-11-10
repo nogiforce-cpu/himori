@@ -65,10 +65,10 @@ export function closeMenu() {
 }
 
 // 汎用オーバーレイ(モーダル/シート)を#modal-rootに描画する
-export function openOverlay(html, { sheet = true, restoreOnCancel = false } = {}) {
+export function openOverlay(html, { sheet = true, restoreOnCancel = false, onCancel } = {}) {
   const root = document.getElementById('modal-root');
   const previous = restoreOnCancel ? Array.from(root.childNodes) : [];
-  const cancel = () => { root.replaceChildren(...previous); };
+  const cancel = () => { root.replaceChildren(...previous); onCancel?.(); };
   const ov = document.createElement('div');
   ov.className = 'overlay active';
   ov.dataset.dynamicOverlay = 'true';

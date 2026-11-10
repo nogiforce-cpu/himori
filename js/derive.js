@@ -388,7 +388,7 @@ export function buildLivingWithWoodEvents({ shelves, woodAdditions, splitLogs, c
   };
 
   burnLogs.forEach((b) => {
-    events.push({ date: b.date, type: 'burn', icon: '#i-flame', iconColor: 'var(--ember)', photo: null, shelfId: b.shelfId, text: '今日、火を焚きました' });
+    events.push({ id: b.id, date: b.date, type: 'burn', icon: '#i-flame', iconColor: 'var(--ember)', photo: null, shelfId: b.shelfId, text: b.date === todayIso() ? '今日、火を焚きました' : '火を焚きました' });
   });
   woodAdditions.forEach((a) => {
     events.push({
@@ -409,7 +409,7 @@ export function buildLivingWithWoodEvents({ shelves, woodAdditions, splitLogs, c
     events.push({ id: c.id, date: c.date, type: 'check', icon: '#i-check', photo: null, shelfId: c.shelfId, text: `${shelfName(c.shelfId)}を記録しました` });
   });
   maintenanceLogs.forEach((m) => {
-    events.push({ date: m.date, type: 'maintenance', icon: '#i-wrench', photo: takePhoto(m.photoId), shelfId: null, text: `${m.type}をしました` });
+    events.push({ id: m.id, date: m.date, type: 'maintenance', icon: '#i-wrench', photo: takePhoto(m.photoId), shelfId: null, text: `${m.type}をしました` });
   });
   // 「薪棚の記録」写真(shelf.photoIds)は、同じ薪棚・同じ日のチェックイベントがあれば
   // そちらのthumbに添える(その日の記録の一部として見える方が自然なため)。

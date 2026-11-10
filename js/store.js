@@ -1,5 +1,5 @@
 // himori.* localStorageの薄いCRUDラッパー + 初回シード
-import { localIsoDate } from './date-utils.js';
+import { localIsoDate, requireRecordDate } from './date-utils.js';
 import { validateBackup } from './backup.js';
 
 const KEYS = {
@@ -335,6 +335,40 @@ export function deleteCheck(id) {
 }
 
 // ---- Burn logs ----
+// Both today's shortcut and calendar entry use this save path. A burn is a
+// diary entry, not an automatic subtraction from shelf quantity.
+export function saveBurnRecord({ date, shelfId = '', note = '' }) {
+  requireRecordDate(date);
+  return transaction(() => {
+    const existing = getBurnLogs().find((b) => b.date === date);
+    if (existing) return { record: existing, duplicate: true, createdSeason: null };
+    if (shelfId && !getShelf(shelfId)) throw new Error('薪棚を選び直してください');
+    const record = addBurnLog({ date, shelfId, note });
+    const seasons = getSeasons();
+    // Seasons run across New Year; July separates two winters. Existing
+    // explicit periods always take precedence over this fallback for gaps.
+    const winter = (d) => Number(d.slice(0, 4)) - (Number(d.slice(5, 7)) < 7 ? 1 : 0);
+    const containing = seasons.find((s) => s.startDate <= date && (!s.endDate || date <= s.endDate));
+    if (containing) return { record, duplicate: false, createdSeason: null };
+    let createdSeason = null;
+    if (date === localIsoDate() && !getCurrentSeason()) {
+      createdSeason = startNewSeason(date);
+    } else {
+      const following = seasons.filter((s) => s.startDate > date).sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
+      const preceding = seasons.filter((s) => s.endDate && s.endDate < date).sort((a, b) => b.endDate.localeCompare(a.endDate))[0];
+      if (following && winter(following.startDate) === winter(date)) following.startDate = date;
+      else if (preceding && winter(preceding.startDate) === winter(date)) preceding.endDate = date;
+      else {
+        createdSeason = { id: uid('season'), startDate: date, endDate: winter(date) === winter(localIsoDate()) && !getCurrentSeason() ? null : date };
+        seasons.push(createdSeason);
+      }
+      seasons.sort((a, b) => a.startDate.localeCompare(b.startDate));
+      writeJSON(KEYS.seasons, seasons);
+    }
+    return { record, duplicate: false, createdSeason };
+  });
+}
+
 export function getBurnLogs() {
   return readJSON(KEYS.burnLogs, []);
 }
@@ -450,6 +484,14 @@ export function recordWeatherHistoryToday(todayWeather) {
 }
 
 // ---- Split logs(薪割り記録) ----
+export function saveSplitRecord(entry, { allowDuplicate = false } = {}) {
+  requireRecordDate(entry.date);
+  if (entry.volumeM3 != null && (!Number.isFinite(entry.volumeM3) || entry.volumeM3 <= 0)) throw new Error('割った量を確認してください');
+  const existing = getSplitLogs().find((s) => s.date === entry.date && s.volumeM3 === entry.volumeM3);
+  if (existing && !allowDuplicate) return { record: existing, duplicate: true };
+  return { record: addSplitLog(entry), duplicate: false };
+}
+
 export function getSplitLogs() {
   return readJSON(KEYS.splitLogs, []);
 }

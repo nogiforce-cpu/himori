@@ -6,7 +6,7 @@ import * as review from './render/review.js';
 import * as album from './render/album.js';
 import * as settings from './render/settings.js';
 import * as calendar from './render/calendar.js';
-import { openAddWoodModal, openCheckEditSheet, openAddShelfSheet, openWoodTypeCollectionSheet, openWoodTypeDetailSheet, openStoveDetailSheet, openInfoSheet } from './render/sheets.js';
+import { openBurnRecordSheet, openSplitLogSheet, openMaintenanceSheet, openAddWoodModal, openCheckEditSheet, openAddShelfSheet, openWoodTypeCollectionSheet, openWoodTypeDetailSheet, openStoveDetailSheet, openInfoSheet } from './render/sheets.js';
 import { openSeasonReviewSheet } from './render/season-review.js';
 import { seedIfEmpty, getProfile, getShelves, getNotificationHistory } from './store.js';
 import { ensureWeatherFresh, maybeNotifyWeather, maybeNotifyChimney, maybeNotifyShelfCheck } from './weather.js';
@@ -166,7 +166,21 @@ function wireStatic() {
   }
 }
 
+function openCalendarRecordPicker(date) {
+  calendar.openRecordPicker(date, (type) => {
+    const onCancel = () => openCalendarRecordPicker(date);
+    const onSaved = (record) => {
+      renderAll();
+      calendar.focusOnDate(record.date);
+    };
+    if (type === 'burn') openBurnRecordSheet(onSaved, { date, onCancel });
+    if (type === 'split') openSplitLogSheet(onSaved, { date, onCancel, allowStack: false });
+    if (type === 'maintenance') openMaintenanceSheet(onSaved, onCancel, { date, onCancel, returnAfterSave: true });
+  });
+}
+
 const ACTIONS = {
+  'add-calendar-record': (el) => openCalendarRecordPicker(el.dataset.date),
   'edit-addition-record': (el) => openAddWoodModal(renderAll, { additionId: el.dataset.id }),
   'edit-check-record': (el) => openCheckEditSheet(el.dataset.id, renderAll),
   'open-add-shelf': () => openAddShelfSheet(renderAll),

@@ -109,7 +109,7 @@ export function render() {
     }
   }
 
-  document.getElementById("settings-support").insertAdjacentHTML("beforeend", '<div class="label-sm" style="margin-top:14px">火守 HIMORI · v61</div>');
+  document.getElementById("settings-support").insertAdjacentHTML("beforeend", '<div class="label-sm" style="margin-top:14px">火守 HIMORI · v62</div>');
   updateAppBadge();
 }
 
